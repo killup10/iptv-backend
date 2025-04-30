@@ -1,6 +1,6 @@
+// middlewares/authMiddleware.js
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-
 
 export const authenticateToken = async (req, res, next) => {
   const token = req.header('Authorization')?.split(' ')[1];
@@ -25,3 +25,6 @@ export const authenticateToken = async (req, res, next) => {
     res.status(401).json({ message: "Token inválido" });
   }
 };
+
+// Alias para mantener compatibilidad con otras rutas
+export const authMiddleware = authenticateToken;
