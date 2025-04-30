@@ -1,3 +1,4 @@
+import m3uRoutes from "./routes/m3u.routes.js";
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
@@ -31,6 +32,7 @@ app.use("/api/auth", (req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/videos", videosRoutes);
+app.use("/api/m3u", m3uRoutes);
 
 // Conexión a MongoDB y levantamiento del servidor
 const PORT = process.env.PORT || 5000;
