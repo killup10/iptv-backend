@@ -1,3 +1,4 @@
+// controllers/m3u.controller.js
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,8 +15,14 @@ export const uploadM3U = async (req, res) => {
       return res.status(400).json({ error: 'Faltan datos: fileName o content' });
     }
 
-    const savePath = path.join(__dirname, '..', 'uploads', fileName);
+    // ① Asegurar que la carpeta uploads exista
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
 
+    // ② Guardar el archivo dentro de uploads/
+    const savePath = path.join(uploadsDir, fileName);
     fs.writeFileSync(savePath, content, 'utf8');
 
     return res.status(200).json({ message: 'Archivo M3U subido correctamente' });
