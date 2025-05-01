@@ -44,3 +44,22 @@ export const listM3U = (req, res) => {
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
+
+// Ver contenido de un archivo M3U
+export const getM3UContent = (req, res) => {
+  try {
+    const { fileName } = req.params;
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    const filePath = path.join(uploadsDir, fileName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    return res.status(200).json({ fileName, content });
+  } catch (error) {
+    console.error('❌ Error al leer M3U:', error);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+};
