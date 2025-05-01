@@ -11,7 +11,10 @@ export const authenticateToken = async (req, res, next) => {
     const user = await User.findById(decoded.id);
 
     if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
-    if (!user.isApproved) return res.status(403).json({ message: "Cuenta pendiente de aprobación" });
+    console.log("🔍 [DEBUG] user.isActive =", user.isActive, "type:", typeof user.isActive);
+
+    if (!user.isActive)
+      return res.status(403).json({ message: "Cuenta pendiente de aprobación" });
     if (user.expirationDate && user.expirationDate < new Date()) {
       return res.status(403).json({ message: "Cuenta expirada" });
     }
