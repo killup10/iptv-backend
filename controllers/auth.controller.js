@@ -32,6 +32,10 @@ export const login = async (req, res) => {
       return res.status(403).json({ error: "Esta cuenta ya está activa en otro dispositivo." });
     }
 
+    + // Validar un solo dispositivo para todos menos el admin
++ if (user.username !== "Adminkillup" && user.deviceId && user.deviceId !== deviceId) {
++   return res.status(403).json({ error: "Esta cuenta ya está activa en otro dispositivo." });
++ }
     // Si no hay deviceId registrado aún, guardar el nuevo
     if (!user.deviceId) {
       user.deviceId = deviceId;
