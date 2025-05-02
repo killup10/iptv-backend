@@ -67,6 +67,20 @@ export const login = async (req, res) => {
     });
 
     res.json({ token });
+
+    // Generar JWT incluyendo el role
++   const payload = { id: user._id, role: user.role };
++   const token = jwt.sign(payload, process.env.JWT_SECRET, {
++     expiresIn: "7d",
++   });
++
++   // Devuelvo token, usuario y role
++   res.json({
++     token,
++     username: user.username,
++     role: user.role
++   });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
