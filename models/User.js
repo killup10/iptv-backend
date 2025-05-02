@@ -1,31 +1,14 @@
-// models/User.js
 import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  isActive: {
-    type: Boolean,
-    default: false // Por defecto, el admin debe activar
-  },
-  expiresAt: {
-    type: Date,
-    default: null // Fecha de expiración de la cuenta
-  },
-  deviceId: {
-    type: String,
-    default: null // Para controlar el dispositivo único
-  }
+  username: { type: String, required: true, unique: true, trim: true },
+  password: { type: String, required: true },
+  isActive: { type: Boolean, default: false },
+  expiresAt: { type: Date, default: null },
+  deviceId: { type: String, default: null },
+  role: { type: String, enum: ["admin", "user"], default: "user" }
 }, {
-  timestamps: true // Añade automáticamente createdAt y updatedAt
+  timestamps: true
 });
 
 export default mongoose.model("User", userSchema);
