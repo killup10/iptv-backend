@@ -1,8 +1,13 @@
 // controllers/auth.controller.js
+
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
+/**
+ * Registro de nuevos usuarios.
+ * Crea un usuario con contraseña hasheada y queda pending hasta aprobación.
+ */
 export const register = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -15,34 +20,52 @@ export const register = async (req, res) => {
   }
 };
 
+/**
+ * Login de usuarios.
+ * Valida credenciales, estado de la cuenta y controla sesión única,
+ * excepto para el usuario administrador "Adminkillup".
+ */
 export const login = async (req, res) => {
   try {
     const { username, password, deviceId } = req.body;
     const user = await User.findOne({ username });
 
-    if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
-    if (!user.isActive) return res.status(403).json({ error: "Tu cuenta aún no está activa." });
-    if (user.expiresAt && user.expiresAt < new Date()) return res.status(403).json({ error: "Tu suscripción ha expirado." });
+    if (!user) 
+      return res.status(404).json({ error: "Usuario no encontrado" });
+
+    if (!user.isActive) 
+      return res.status(403).json({ error: "Tu cuenta aún no está activa." });
+
+    if (user.expiresAt && user.expiresAt < new Date()) 
+      return res.status(403).json({ error: "Tu suscripción ha expirado." });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: "Contraseña incorrecta" });
+    if (!isMatch) 
+      return res.status(400).json({ error: "Contraseña incorrecta" });
 
-    // Validar un solo dispositivo
-    if (user.deviceId && user.deviceId !== deviceId) {
-      return res.status(403).json({ error: "Esta cuenta ya está activa en otro dispositivo." });
+    // ← Validación de sesión única para usuarios que NO sean Adminkillup
+    if (
+      user.username !== "Adminkillup" &&
+      user.deviceId &&
+      user.deviceId !== deviceId
+    ) {
+      return res
+        .status(403)
+        .json({ error: "Esta cuenta ya está activa en otro dispositivo." });
     }
 
-    + // Validar un solo dispositivo para todos menos el admin
-+ if (user.username !== "Adminkillup" && user.deviceId && user.deviceId !== deviceId) {
-+   return res.status(403).json({ error: "Esta cuenta ya está activa en otro dispositivo." });
-+ }
-    // Si no hay deviceId registrado aún, guardar el nuevo
-    if (!user.deviceId) {
+    // ← Registrar deviceId la primera vez (solo para no-admin)
+    if (user.username !== "Adminkillup" && !user.deviceId) {
       user.deviceId = deviceId;
       await user.save();
     }
+    // Si es Adminkillup, nunca bloqueamos por deviceId
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    // Generar JWT
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
+
     res.json({ token });
   } catch (error) {
     res.status(500).json({ error: error.message });
