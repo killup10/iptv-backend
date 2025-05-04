@@ -14,7 +14,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Endpoint para subir un archivo M3U
+/* ---------------------- 1. SUBIR ARCHIVO .M3U ----------------------- */
 router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) => {
   const entries = [];
   const fileStream = fs.createReadStream(req.file.path);
@@ -39,6 +39,7 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
         logo: currentLogo,
         group: currentGroup,
         url: line,
+        tipo: "canal", // ← Marcamos como canal
       });
       await video.save();
       entries.push(video);
@@ -46,34 +47,23 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
   }
 
   fs.unlinkSync(req.file.path);
-  res.json({ entries });
+  res.json({ message: "Archivo M3U procesado", entries });
 });
 
-// Endpoint para listar todos los videos
+/* -------------------- 2. SUBIR VIDEO MANUAL (DROPBOX, etc) ------------------ */
+router.post("/upload-link", verifyToken, async (req, res) => {
+  const { title, url, tipo = "pelicula", thumbnail = "", group = "" } = req.body;
+  if (!title || !url) return res.status(400).json({ error: "Faltan datos" });
+
+  const video = new Video({ title, url, tipo, thumbnail, group });
+  await video.save();
+  res.json({ message: "Video VOD guardado correctamente", video });
+});
+
+/* -------------------------- 3. LISTAR VIDEOS -------------------------- */
 router.get("/", verifyToken, async (req, res) => {
   const videos = await Video.find().sort({ createdAt: -1 });
   res.json(videos);
-});
-
-// Endpoint de catálogo ejemplo
-router.get("/catalogo", (req, res) => {
-  const contenidoEjemplo = [
-    {
-      _id: "1",
-      titulo: "Película 4K en Dropbox",
-      tipo: "pelicula",
-      thumbnail: "https://via.placeholder.com/300x150.png?text=4K+Movie",
-      videoUrl: "https://www.dropbox.com/s/XXXXXX/tu-pelicula.mp4?raw=1",
-    },
-    {
-      _id: "2",
-      titulo: "Canales IPTV",
-      tipo: "m3u",
-      thumbnail: "https://via.placeholder.com/300x150.png?text=IPTV",
-      videoUrl: "https://www.dropbox.com/s/XXXXXX/lista.m3u?raw=1",
-    },
-  ];
-  res.json(contenidoEjemplo);
 });
 
 export default router;
