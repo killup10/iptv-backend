@@ -12,10 +12,19 @@ import adminContentRoutes from "./routes/adminContent.routes.js";
 
 dotenv.config();
 
-const app = express(); // 🔥 ESTA LÍNEA DEBE IR ANTES de usar `app.use(...)`
+const app = express();
 
-// Middlewares
-app.use(cors());
+// Middlewares con CORS mejorado
+app.use(cors({
+  origin: [
+    'https://iptv-frontend-iota.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Rutas API
@@ -32,7 +41,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/videos", videosRoutes);
 app.use("/api/m3u", m3uRoutes);
-app.use("/api/admin-content", adminContentRoutes); // ✅ Ahora sí está en el lugar correcto
+app.use("/api/admin-content", adminContentRoutes);
 
 // Conexión a MongoDB
 const PORT = process.env.PORT || 5000;

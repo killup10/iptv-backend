@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,12 +15,12 @@ export const uploadM3U = async (req, res) => {
     }
 
     const uploadsDir = path.join(__dirname, '..', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    if (!(await fs.stat(uploadsDir).catch(() => null))) {
+      await fs.mkdir(uploadsDir, { recursive: true });
     }
 
     const savePath = path.join(uploadsDir, fileName);
-    fs.writeFileSync(savePath, content, 'utf8');
+    await fs.writeFile(savePath, content, 'utf8');
 
     return res.status(200).json({ message: 'Archivo M3U subido correctamente' });
   } catch (error) {
@@ -30,15 +30,16 @@ export const uploadM3U = async (req, res) => {
 };
 
 // Listar archivos M3U
-export const listM3U = (req, res) => {
+export const listM3U = async (req, res) => {
   try {
     const uploadsDir = path.join(__dirname, '..', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
+    if (!(await fs.stat(uploadsDir).catch(() => null))) {
       return res.status(200).json({ files: [] });
     }
 
-    const files = fs.readdirSync(uploadsDir).filter(file => file.endsWith('.m3u'));
-    return res.status(200).json({ files });
+    const files = await fs.readdir(uploadsDir);
+    const m3uFiles = files.filter(file => file.endsWith('.m3u'));
+    return res.status(200).json({ files: m3uFiles });
   } catch (error) {
     console.error('❌ Error al listar M3U:', error);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -46,17 +47,21 @@ export const listM3U = (req, res) => {
 };
 
 // Ver contenido de un archivo M3U
-export const getM3UContent = (req, res) => {
+export const getM3UContent = async (req, res) => {
   try {
     const { fileName } = req.params;
     const uploadsDir = path.join(__dirname, '..', 'uploads');
     const filePath = path.join(uploadsDir, fileName);
 
-    if (!fs.existsSync(filePath)) {
+    if (!(await fs.stat(filePath).catch(() => null))) {
       return res.status(404).json({ error: 'Archivo no encontrado' });
     }
 
-    const content = fs.readFileSync(filePath, 'utf8');
+    if (!fileName.endsWith('.m3u')) {
+      return res.status(400).json({ error: 'El archivo no es un M3U' });
+    }
+
+    const content = await fs.readFile(filePath, 'utf8');
     return res.status(200).json({ fileName, content });
   } catch (error) {
     console.error('❌ Error al leer M3U:', error);
