@@ -1,6 +1,6 @@
 // 📁 backend/routes/adminContent.routes.js
 import express from "express";
-import { verifyToken, isAdmin } from "../middleware/auth.middleware.js";
+import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Content from "../models/content.model.js"; // model para VOD y canales
 
 const router = express.Router();
