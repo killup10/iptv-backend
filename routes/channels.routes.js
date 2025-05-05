@@ -8,7 +8,9 @@ const router = express.Router();
 // Obtener todos los canales
 router.get("/list", async (req, res) => {
   try {
+    console.log("Buscando canales activos...");
     const channels = await Channel.find({ active: true }).sort({ name: 1 });
+    console.log(`Se encontraron ${channels.length} canales`);
     res.json(channels);
   } catch (error) {
     console.error('Error al obtener canales:', error);
