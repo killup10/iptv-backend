@@ -4,6 +4,7 @@ import fs from "fs";
 import readline from "readline";
 import { verifyToken } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
+import getTMDBThumbnail from "../utils/getTMDBThumbnail.js"; // 👈 Importa la función
 
 const router = express.Router();
 
@@ -34,9 +35,10 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
       currentLogo = logoMatch ? logoMatch[1] : '';
       currentGroup = groupMatch ? groupMatch[1] : '';
     } else if (line.startsWith('http')) {
+      const thumbnail = currentLogo || await getTMDBThumbnail(currentTitle);
       const video = new Video({
         title: currentTitle,
-        logo: currentLogo,
+        logo: thumbnail,
         group: currentGroup,
         url: line,
         tipo: "canal", // ← Marcamos como canal
@@ -55,7 +57,16 @@ router.post("/upload-link", verifyToken, async (req, res) => {
   const { title, url, tipo = "pelicula", thumbnail = "", group = "" } = req.body;
   if (!title || !url) return res.status(400).json({ error: "Faltan datos" });
 
-  const video = new Video({ title, url, tipo, thumbnail, group });
+  const autoThumbnail = thumbnail || await getTMDBThumbnail(title);
+
+  const video = new Video({
+    title,
+    url,
+    tipo,
+    thumbnail: autoThumbnail,
+    group,
+  });
+
   await video.save();
   res.json({ message: "Video VOD guardado correctamente", video });
 });
