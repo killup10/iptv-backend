@@ -2,6 +2,7 @@
 import express from "express";
 import Channel from "../models/Channel.js";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
+import getTMDBThumbnail from "../utils/getTMDBThumbnail.js"; // ⬅️ Importamos la utilidad
 
 const router = express.Router();
 
@@ -22,25 +23,26 @@ router.get("/list", async (req, res) => {
 router.post("/", verifyToken, isAdmin, async (req, res) => {
   try {
     const { name, url, category, logo } = req.body;
-    
-    // Validación básica
+
     if (!name || !url) {
       return res.status(400).json({ error: 'Nombre y URL son requeridos' });
     }
-    
-    // Comprobar si ya existe un canal con la misma URL
+
     const existingChannel = await Channel.findOne({ url });
     if (existingChannel) {
       return res.status(400).json({ error: 'Ya existe un canal con esta URL' });
     }
-    
+
+    // 🔍 Buscar thumbnail automáticamente si no se envió logo
+    const thumbnail = logo || await getTMDBThumbnail(name);
+
     const newChannel = new Channel({
       name,
       url,
       category: category || 'general',
-      logo: logo || ''
+      logo: thumbnail
     });
-    
+
     await newChannel.save();
     res.status(201).json(newChannel);
   } catch (error) {
@@ -67,12 +69,11 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res) => {
 router.put("/:id", verifyToken, isAdmin, async (req, res) => {
   try {
     const { name, url, category, logo, active } = req.body;
-    
-    // Validación básica
+
     if (!name || !url) {
       return res.status(400).json({ error: 'Nombre y URL son requeridos' });
     }
-    
+
     const updatedChannel = await Channel.findByIdAndUpdate(
       req.params.id,
       {
@@ -85,11 +86,11 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
       },
       { new: true }
     );
-    
+
     if (!updatedChannel) {
       return res.status(404).json({ error: 'Canal no encontrado' });
     }
-    
+
     res.json(updatedChannel);
   } catch (error) {
     console.error('Error al actualizar canal:', error);
