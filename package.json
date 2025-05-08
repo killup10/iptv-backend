@@ -16,7 +16,8 @@
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.0.3",
     "multer": "^1.4.4",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^2.7.0",
+    "shaka-player": "^4.14.11"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

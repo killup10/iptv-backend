@@ -3,6 +3,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+import fetch from "node-fetch"; // Asegúrate de tener esto instalado
 
 import { verifyToken } from "./middlewares/verifyToken.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -27,6 +28,24 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// 🔁 Endpoint para proxy de enlaces M3U8
+app.get("/proxy", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send("Missing url query parameter");
+
+  try {
+    const response = await fetch(url);
+    res.set({
+      "Content-Type": response.headers.get("content-type") || "application/vnd.apple.mpegurl",
+      "Access-Control-Allow-Origin": "*"
+    });
+    response.body.pipe(res);
+  } catch (err) {
+    console.error("Error en proxy:", err.message);
+    res.status(500).send("Error al redirigir stream");
+  }
+});
 
 // Rutas API
 app.get("/", (req, res) => {
