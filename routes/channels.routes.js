@@ -6,13 +6,17 @@ import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 
 const router = express.Router();
 
-// Obtener todos los canales activos
+// Obtener todos los canales activos (mapea a { id, name, thumbnail, url })
 router.get("/list", async (req, res) => {
   try {
-    console.log("Buscando canales activos...");
     const channels = await Channel.find({ active: true }).sort({ name: 1 });
-    console.log(`Se encontraron ${channels.length} canales`);
-    res.json(channels);
+    const payload = channels.map(c => ({
+      id: c._id,
+      name: c.name,
+      thumbnail: c.logo || "",
+      url: c.url
+    }));
+    res.json(payload);
   } catch (error) {
     console.error("Error al obtener canales:", error);
     res.status(500).json({ error: "Error al obtener canales" });
@@ -24,30 +28,32 @@ router.post("/", verifyToken, isAdmin, async (req, res) => {
   try {
     const { name, url, category, logo } = req.body;
 
-    // Validación básica
     if (!name || !url) {
       return res.status(400).json({ error: "Nombre y URL son requeridos" });
     }
 
-    // Comprobar duplicados por URL
-    const existingChannel = await Channel.findOne({ url });
-    if (existingChannel) {
+    const existing = await Channel.findOne({ url });
+    if (existing) {
       return res.status(400).json({ error: "Ya existe un canal con esta URL" });
     }
 
-    // Buscar thumbnail automáticamente si no se envió logo
-    const thumbnail = logo || (await getTMDBThumbnail(name));
-
+    const thumbnail = logo || (await getTMDBThumbnail(name)) || "";
     const newChannel = new Channel({
       name,
       url,
       category: category || "general",
       logo: thumbnail,
-      active: true,
+      active: true
     });
-
     await newChannel.save();
-    res.status(201).json(newChannel);
+
+    // Devolver formato limpio
+    res.status(201).json({
+      id: newChannel._id,
+      name: newChannel.name,
+      thumbnail: newChannel.logo,
+      url: newChannel.url
+    });
   } catch (error) {
     console.error("Error al crear canal:", error);
     res.status(400).json({ error: "Error al crear canal" });
@@ -73,30 +79,35 @@ router.put("/:id", verifyToken, isAdmin, async (req, res) => {
   try {
     const { name, url, category, logo, active } = req.body;
 
-    // Validación básica
     if (!name || !url) {
       return res.status(400).json({ error: "Nombre y URL son requeridos" });
     }
 
-    // Actualizar y recuperar el documento nuevo
-    const updatedChannel = await Channel.findByIdAndUpdate(
+    const thumbnail = logo || "";
+    const updated = await Channel.findByIdAndUpdate(
       req.params.id,
       {
         name,
         url,
         category: category || "general",
-        logo: logo || "",
+        logo: thumbnail,
         active: active !== undefined ? active : true,
-        updatedAt: Date.now(),
+        updatedAt: Date.now()
       },
       { new: true }
     );
 
-    if (!updatedChannel) {
+    if (!updated) {
       return res.status(404).json({ error: "Canal no encontrado" });
     }
 
-    res.json(updatedChannel);
+    res.json({
+      id: updated._id,
+      name: updated.name,
+      thumbnail: updated.logo,
+      url: updated.url,
+      active: updated.active
+    });
   } catch (error) {
     console.error("Error al actualizar canal:", error);
     res.status(400).json({ error: "Error al actualizar canal" });
