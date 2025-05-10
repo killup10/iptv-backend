@@ -1,13 +1,14 @@
-// models/Video.js
 import mongoose from "mongoose";
 
 const videoSchema = new mongoose.Schema({
-  title: { type: String },
-  logo: { type: String },
-  group: { type: String },
+  titulo: { type: String },
+  descripcion: { type: String },
   url: { type: String },
-  tipo: { type: String, default: "canal" }, // canal, pelicula, serie
-  thumbnail: { type: String }, // Para VODs o placeholder
+  tipo: { type: String, default: "movie" }, // canal, movie, serie
+  thumbnail: { type: String },              // imagen de respaldo
+  customThumbnail: { type: String },        // subida manual
+  tmdbThumbnail: { type: String },          // generada con la API
+  usuario: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   createdAt: { type: Date, default: Date.now }
 });
 

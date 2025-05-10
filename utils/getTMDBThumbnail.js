@@ -16,8 +16,16 @@ export default async function getTMDBThumbnail(title) {
     const data = await res.json();
 
     if (data?.results?.length) {
-      const item = data.results[0];
-      return `https://image.tmdb.org/t/p/w500${item.poster_path || item.backdrop_path || ''}`;
+      const validItem = data.results.find(
+        (item) =>
+          (item.media_type === "movie" || item.media_type === "tv") &&
+          (item.poster_path || item.backdrop_path)
+      );
+
+      if (validItem) {
+        const path = validItem.poster_path || validItem.backdrop_path;
+        return `https://image.tmdb.org/t/p/w500${path}`;
+      }
     }
   } catch (err) {
     console.error("Error al buscar en TMDB:", err);

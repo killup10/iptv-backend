@@ -1,4 +1,5 @@
 import Video from "../models/video.model.js";
+import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 
 export const getVideos = async (req, res) => {
   try {
@@ -25,35 +26,44 @@ export const getVideoById = async (req, res) => {
 
 export const createVideo = async (req, res) => {
   try {
-    const { titulo, descripcion, url, thumbnail, tipo } = req.body;
-    
+    const {
+      titulo,
+      descripcion,
+      url,
+      thumbnail,
+      tipo,
+      customThumbnail
+    } = req.body;
+
     if (!titulo || !url) {
       return res.status(400).json({ error: "Título y URL son obligatorios" });
     }
-    
-    // Procesar URL de Dropbox para reproducción directa
+
     let playableUrl = url;
-    
-    // Si es URL de Dropbox normal, convertirla al formato dl.dropboxusercontent.com
-    if (url.includes('dropbox.com/s/') && !url.includes('dl.dropboxusercontent.com')) {
-      playableUrl = url.replace('www.dropbox.com/s/', 'dl.dropboxusercontent.com/s/');
+
+    if (url.includes("dropbox.com/s/") && !url.includes("dl.dropboxusercontent.com")) {
+      playableUrl = url.replace("www.dropbox.com/s/", "dl.dropboxusercontent.com/s/");
     }
-    
-    // Añadir raw=1 si no está presente para forzar descarga directa
-    if (playableUrl.includes('dropbox') && !playableUrl.includes('raw=1')) {
-      playableUrl = playableUrl.includes('?') 
-        ? playableUrl + '&raw=1' 
-        : playableUrl + '?raw=1';
+
+    if (playableUrl.includes("dropbox") && !playableUrl.includes("raw=1")) {
+      playableUrl = playableUrl.includes("?")
+        ? playableUrl + "&raw=1"
+        : playableUrl + "?raw=1";
     }
-    
-    const newVideo = new Video({
-      titulo,
-      descripcion: descripcion || "",
-      url: playableUrl,
-      thumbnail: thumbnail || "https://via.placeholder.com/300x170?text=Video",
-      tipo: tipo || "movie",
-      usuario: req.user?.id
-    });
+
+    let finalThumbnail = thumbnail;
+if (!thumbnail) {
+  finalThumbnail = await getTMDBThumbnail(titulo);
+}
+
+const newVideo = new Video({
+  titulo,
+  descripcion: descripcion || "",
+  url: playableUrl,
+  thumbnail: finalThumbnail || "https://via.placeholder.com/300x170?text=Video",
+  tipo: tipo || "movie",
+  usuario: req.user?.id,
+});
 
     const savedVideo = await newVideo.save();
     res.status(201).json({ video: savedVideo });
