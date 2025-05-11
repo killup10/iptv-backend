@@ -14,16 +14,23 @@ const channelSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    default: 'general'
+    default: 'general',
+    trim: true // Buena práctica añadir trim a strings
   },
   logo: {
     type: String,
     default: ''
   },
+  description: { // <--- NUEVO CAMPO AÑADIDO
+    type: String,
+    default: '',
+    trim: true
+  },
   active: {
     type: Boolean,
     default: true
   },
+  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Si decides asociar canales a usuarios
   createdAt: {
     type: Date,
     default: Date.now
@@ -34,7 +41,6 @@ const channelSchema = new mongoose.Schema({
   }
 });
 
-// Actualiza la fecha de modificación antes de guardar
 channelSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
