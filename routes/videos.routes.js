@@ -1,22 +1,24 @@
-// routes/videos.routes.js
+// iptv-backend/routes/videos.routes.js
 import express from "express";
 import multer from "multer";
 import fs from "fs";
 import readline from "readline";
 import { verifyToken } from "../middlewares/verifyToken.js";
-import Video from "../models/Video.js"; // Tu modelo Video
-import Channel from "../models/Channel.js"; // <--- IMPORTANTE: Importa el modelo Channel
+import Video from "../models/Video.js"; // Tu modelo Video actualizado
+import Channel from "../models/Channel.js"; // Para guardar M3U en Channels
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 
 const router = express.Router();
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
+  destination: (req, file, cb) => cb(null, "uploads/"), // Carpeta para M3U temporales
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
 const upload = multer({ storage });
 
-/* ---------------------- 1. SUBIR ARCHIVO .M3U y PROCESAR A CHANNELS ----------------------- */
+/* ========================================================================== */
+/* 1. SUBIR ARCHIVO .M3U y PROCESAR A CHANNELS                */
+/* ========================================================================== */
 router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No se proporcionó ningún archivo M3U." });
@@ -26,9 +28,9 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
   const fileStream = fs.createReadStream(req.file.path);
   const rl = readline.createInterface({ input: fileStream });
 
-  let currentName = ""; // Para Channel model
+  let currentName = "";
   let currentLogo = "";
-  let currentCategory = ""; // Para Channel model
+  let currentCategory = "";
 
   try {
     for await (const line of rl) {
@@ -53,14 +55,13 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
           }
         }
         
-        // GUARDAR EN LA COLECCIÓN Channel
-        const newChannel = new Channel({
+        const newChannel = new Channel({ // Guardando en la colección Channel
           name: currentName,
           url: streamUrl,
           category: currentCategory,
           logo: finalLogo || "",
           active: true,
-          // user: req.user.id, // Descomenta si Channel model tiene 'user' y quieres asociarlo
+          // user: req.user.id, // Descomenta si tu modelo Channel tiene 'user'
         });
         
         try {
@@ -93,10 +94,16 @@ router.post("/upload-m3u", verifyToken, upload.single("file"), async (req, res) 
   }
 });
 
-/* -------------------- 2. SUBIR VIDEO MANUAL (VOD) ------------------ */
+/* ========================================================================== */
+/* 2. SUBIR VIDEO MANUAL (Película o Serie VOD)             */
+/* ========================================================================== */
 router.post("/upload-link", verifyToken, async (req, res) => {
-  // Asumiendo que Video model tiene: title, url, tipo, logo, category, description, releaseYear, isFeatured
-  const { title, url, tipo = "pelicula", thumbnail, category, description, releaseYear, isFeatured } = req.body;
+  const { 
+    title, url, tipo = "pelicula", 
+    thumbnail, // Este podría ser el 'logo' de tu modelo Video
+    category, description, releaseYear, isFeatured 
+  } = req.body;
+
   if (!title || !url) {
     return res.status(400).json({ error: "Título y URL son requeridos para VOD" });
   }
@@ -106,12 +113,13 @@ router.post("/upload-link", verifyToken, async (req, res) => {
       title,
       url,
       tipo,
-      logo: finalThumbnail,
+      logo: finalThumbnail, // Usando el campo 'logo' de tu modelo Video
       category: category || "General",
       description: description || "",
       releaseYear: releaseYear || null,
       isFeatured: isFeatured || false,
-      user: req.user.id, // Asocia VOD al usuario que lo sube
+      active: true, // Asegúrate de que tu modelo Video.js tenga el campo 'active'
+      user: req.user.id,
     });
     await video.save();
     res.status(201).json({ message: "Video VOD guardado correctamente", video });
@@ -121,16 +129,13 @@ router.post("/upload-link", verifyToken, async (req, res) => {
   }
 });
 
-/* ------------- 3. LISTAR VIDEOS (Películas Y Series - Protegido) --------------- */
+/* ========================================================================== */
+/* 3. LISTAR VIDEOS (Películas Y Series - Protegido)              */
+/* ========================================================================== */
 router.get("/", verifyToken, async (req, res) => {
   try {
-    // Aquí podrías filtrar por req.user.id si los VOD son específicos del usuario
-    // o si los planes de usuario restringen el acceso.
-    // Por ahora, devuelve todos.
-    const videos = await Video.find({ user: req.user.id }) // Ejemplo: solo videos del usuario
+    const videos = await Video.find({ user: req.user.id, active: true }) // Solo del usuario y activos
                            .sort({ createdAt: -1 }); 
-    // O si los VOD son globales para todos los usuarios logueados:
-    // const videos = await Video.find().sort({ createdAt: -1 });
     res.json(videos);
   } catch (error) {
     console.error("Error al listar videos (protegido):", error);
@@ -138,49 +143,61 @@ router.get("/", verifyToken, async (req, res) => {
   }
 });
 
-/* ------------------- 4. NUEVO: Listar Videos/Series Destacados (Público) -------------------- */
-router.get("/public/featured", async (req, res) => {
+/* ========================================================================== */
+/* 4. ENDPOINTS PÚBLICOS PARA CONTENIDO DESTACADO                 */
+/* ========================================================================== */
+
+// Función helper para mapear formato de VOD para el frontend
+const mapVODToFrontendFormat = (v) => ({
+  id: v._id,
+  name: v.title, // Frontend usa 'name' en Carousels
+  title: v.title,
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || v.thumbnail || "", // Lógica para el mejor thumbnail
+  url: v.url,
+  category: v.category || "general",
+  tipo: v.tipo,
+  description: v.description || "",
+  trailerUrl: v.trailerUrl || ""
+});
+
+// Endpoint público para películas destacadas
+router.get("/public/featured-movies", async (req, res) => {
   try {
-    const commonQueryOptions = { active: true }; // Asumiendo que tienes 'active' en Channel y Video
-
-    // Películas Destacadas:
-    const featuredMovies = await Video.find({ tipo: "pelicula", ...commonQueryOptions })
-                                     .sort({ createdAt: -1 })
-                                     .limit(10); 
-
-    // Series Destacadas:
-    const featuredSeries = await Video.find({ tipo: "serie", isFeatured: true, ...commonQueryOptions })
-                                     .sort({ createdAt: -1 }) 
-                                     .limit(5); 
-
-    const mapToFrontendFormat = (v) => ({
-      id: v._id,
-      name: v.title,
-      title: v.title,
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || v.thumbnail || "",
-      url: v.url,
-      category: v.category || "general",
-      tipo: v.tipo,
-    });
-
-    res.json({
-      movies: featuredMovies.map(mapToFrontendFormat),
-      series: featuredSeries.map(mapToFrontendFormat)
-    });
+    const movies = await Video.find({ tipo: "pelicula", active: true }) // Asume que Video model tiene 'active'
+                                 .sort({ createdAt: -1 })
+                                 .limit(10);
+    res.json(movies.map(mapVODToFrontendFormat));
   } catch (error) {
-    console.error("Error al obtener contenido destacado público:", error);
-    res.status(500).json({ error: "Error al obtener contenido destacado" });
+    console.error("Error al obtener películas destacadas:", error);
+    res.status(500).json({ error: "Error al obtener películas destacadas" });
   }
 });
 
-/* ------------------------ 5. OBTENER VIDEO POR ID (Protegido) ----------------------- */
+// Endpoint público para series destacadas
+router.get("/public/featured-series", async (req, res) => {
+  try {
+    const series = await Video.find({ tipo: "serie", isFeatured: true, active: true }) // Asume que Video model tiene 'active' e 'isFeatured'
+                                 .sort({ createdAt: -1 })
+                                 .limit(5);
+    res.json(series.map(mapVODToFrontendFormat));
+  } catch (error) {
+    console.error("Error al obtener series destacadas:", error);
+    res.status(500).json({ error: "Error al obtener series destacadas" });
+  }
+});
+
+
+/* ========================================================================== */
+/* 5. OBTENER VIDEO POR ID (Protegido)                        */
+/* ========================================================================== */
 router.get("/:id", verifyToken, async (req, res) => {
   try {
-    const vid = await Video.findOne({ _id: req.params.id, user: req.user.id }); // Ejemplo: asegurar que el video pertenezca al usuario
-    // O si los VOD son globales para todos los usuarios logueados:
-    // const vid = await Video.findById(req.params.id);
-    if (!vid) return res.status(404).json({ error: "Video no encontrado o acceso denegado" });
-    res.json(vid);
+    // Asegúrate que solo el usuario dueño o un admin puedan ver videos no activos si implementas eso
+    const vid = await Video.findOne({ _id: req.params.id, user: req.user.id, active: true });
+    // O si son globales para usuarios logueados y activos:
+    // const vid = await Video.findOne({ _id: req.params.id, active: true });
+    if (!vid) return res.status(404).json({ error: "Video no encontrado, no activo, o acceso denegado" });
+    res.json(vid); // Devuelve el documento completo, Watch.jsx lo normalizará
   } catch (err) {
     console.error("Error al obtener video por ID:", err);
     if (err.kind === 'ObjectId') return res.status(400).json({ error: "ID de video inválido" });
