@@ -11,36 +11,39 @@ export const register = async (req, res, next) => {
     if (!username || !password) {
       return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
     }
-    if (password.length < 6) { // Mantén tus validaciones de contraseña
+    if (password.length < 6) {
         return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres." });
     }
 
-    // Verificar si el usuario ya existe (sensible a mayúsculas/minúsculas, según tu Opción 2)
+    // Verificar si el usuario ya existe (sensible a mayúsculas/minúsculas)
     const existingUser = await User.findOne({ username: username }); 
     if (existingUser) {
       return res.status(409).json({ error: "El nombre de usuario ya está en uso." });
     }
     
-    // El hasheo de la contraseña se hace con el hook pre-save en el modelo User.js
     const user = new User({ 
-        username: username, // Guardar el username tal como se envió
-        password: password, 
-        // isActive y role usarán los defaults del modelo User.js
+        username: username, // Se guarda tal cual (sensible a mayúsculas/minúsculas)
+        password: password, // El hook pre-save en el modelo User.js se encargará del hash
+        // isActive y role usarán los defaults del modelo User.js (ej. isActive: false, role: 'user')
+        // plan usará el default 'basico' del modelo User.js
     });
     await user.save();
     
-    res.status(201).json({ message: "Registro exitoso. Tu cuenta está pendiente de aprobación por un administrador." });
+    res.status(201).json({ message: "Registro exitoso. Tu cuenta está pendiente de aprobación." });
 
   } catch (error) {
-    if (error.code === 11000) {
+    if (error.code === 11000) { // Error de duplicado de MongoDB
         return res.status(409).json({ error: "El nombre de usuario ya está en uso (error de base de datos)." });
     }
-    console.error("Error en el controlador de registro:", error);
+    console.error("Error en el controlador de registro (Backend):", error);
     next(error);
   }
 };
 
 // Login de usuarios
+// iptv-backend/controllers/auth.controller.js
+// ... (otros imports y la función register) ...
+
 export const login = async (req, res, next) => {
   try {
     const { username, password, deviceId } = req.body;
@@ -51,7 +54,6 @@ export const login = async (req, res, next) => {
         return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
     }
 
-    // Busca al usuario (sensible a mayúsculas/minúsculas) y trae la contraseña
     const user = await User.findOne({ username: username }).select('+password'); 
 
     if (!user) {
@@ -59,7 +61,7 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ error: "Credenciales inválidas." }); 
     }
     
-    console.log("LOGIN CONTROLLER (Backend): Usuario encontrado:", user.username, "Role:", user.role, "isActive:", user.isActive, "expiresAt:", user.expiresAt);
+    console.log("LOGIN CONTROLLER (Backend): Usuario encontrado:", user.username, "Role:", user.role, "Plan:", user.plan, "isActive:", user.isActive, "expiresAt:", user.expiresAt);
 
     if (!user.isActive) {
       return res.status(403).json({ error: "Tu cuenta está inactiva o pendiente de aprobación." });
@@ -68,9 +70,7 @@ export const login = async (req, res, next) => {
       return res.status(403).json({ error: "Tu suscripción ha expirado." });
     }
 
-    // Usa el método del modelo si lo tienes:
     const isMatch = await user.comparePassword(password);
-    // Si no: const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
       return res.status(401).json({ error: "Credenciales inválidas." });
@@ -91,24 +91,24 @@ export const login = async (req, res, next) => {
     const payload = { 
         id: user._id, 
         role: user.role,
-        username: user.username 
+        username: user.username,
+        plan: user.plan 
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    console.log("LOGIN BACKEND: Login exitoso para:", user.username, "Rol:", user.role);
-    
-    // --- AJUSTE CRÍTICO AQUÍ ---
-    // Enviar la respuesta con el objeto 'user' anidado que AuthContext.jsx espera
-    res.json({ 
+    const responsePayloadForFrontend = { 
         token, 
         user: { // <--- OBJETO 'user' ANIDADO
             username: user.username, 
-            role: user.role 
-            // Puedes añadir más campos aquí si AuthContext o el frontend los necesitan
-            // por ejemplo, el plan: plan: user.plan
+            role: user.role,
+            plan: user.plan // <--- ASEGÚRATE DE QUE user.plan SE ESTÉ OBTENIENDO Y ENVIANDO
         }
-    });
-    // --- FIN AJUSTE ---
+    };
+    
+    console.log("LOGIN BACKEND: Login exitoso para:", user.username, "Rol:", user.role, "Plan:", user.plan);
+    console.log("LOGIN BACKEND: Payload a enviar al frontend:", JSON.stringify(responsePayloadForFrontend)); // Log para verificar
+
+    res.json(responsePayloadForFrontend); // <--- ENVÍA EL PAYLOAD CON EL USER ANIDADO
 
   } catch (error) {
     console.error("Error en el controlador de login (Backend):", error);
