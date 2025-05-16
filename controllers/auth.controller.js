@@ -1,7 +1,7 @@
 // iptv-backend/controllers/auth.controller.js
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import User from "../models/User.js"; // Asegúrate que el path a tu modelo User sea correcto
 
 // Registro de nuevos usuarios
 export const register = async (req, res, next) => {
@@ -15,17 +15,17 @@ export const register = async (req, res, next) => {
         return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres." });
     }
 
-    // Verificar si el usuario ya existe (sensible a mayúsculas/minúsculas)
-    const existingUser = await User.findOne({ username: username }); // Sin .toLowerCase()
+    // Verificar si el usuario ya existe (sensible a mayúsculas/minúsculas, según tu Opción 2)
+    const existingUser = await User.findOne({ username: username }); 
     if (existingUser) {
       return res.status(409).json({ error: "El nombre de usuario ya está en uso." });
     }
     
+    // El hasheo de la contraseña se hace con el hook pre-save en el modelo User.js
     const user = new User({ 
         username: username, // Guardar el username tal como se envió
-        password: password, // El hook pre-save en el modelo se encargará del hash
-        // isActive por defecto en el modelo será false, o como lo tengas configurado
-        // role por defecto en el modelo será 'user'
+        password: password, 
+        // isActive y role usarán los defaults del modelo User.js
     });
     await user.save();
     
@@ -51,8 +51,7 @@ export const login = async (req, res, next) => {
         return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
     }
 
-    // Busca al usuario (sensible a mayúsculas/minúsculas)
-    // y trae la contraseña explícitamente si está con select:false en el modelo
+    // Busca al usuario (sensible a mayúsculas/minúsculas) y trae la contraseña
     const user = await User.findOne({ username: username }).select('+password'); 
 
     if (!user) {
@@ -69,12 +68,14 @@ export const login = async (req, res, next) => {
       return res.status(403).json({ error: "Tu suscripción ha expirado." });
     }
 
+    // Usa el método del modelo si lo tienes:
     const isMatch = await user.comparePassword(password);
+    // Si no: const isMatch = await bcrypt.compare(password, user.password);
+    
     if (!isMatch) {
       return res.status(401).json({ error: "Credenciales inválidas." });
     }
 
-    // Lógica de deviceId (asumiendo que el admin no tiene esta restricción o se maneja por rol)
     const isAdminUser = user.role === 'admin';
     if (!isAdminUser && user.deviceId && user.deviceId !== deviceId && deviceId) {
       return res.status(403).json({ 
@@ -83,7 +84,6 @@ export const login = async (req, res, next) => {
     }
     if (!isAdminUser && deviceId && (!user.deviceId || user.deviceId !== deviceId)) {
       user.deviceId = deviceId;
-      // Solo guardar si es necesario, el hook pre-save de password no se disparará si no se modifica password
       await user.save(); 
       console.log(`LOGIN CONTROLLER (Backend): DeviceId actualizado para ${user.username} a ${deviceId}`);
     }
@@ -96,13 +96,19 @@ export const login = async (req, res, next) => {
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     console.log("LOGIN BACKEND: Login exitoso para:", user.username, "Rol:", user.role);
+    
+    // --- AJUSTE CRÍTICO AQUÍ ---
+    // Enviar la respuesta con el objeto 'user' anidado que AuthContext.jsx espera
     res.json({ 
         token, 
-        user: {
+        user: { // <--- OBJETO 'user' ANIDADO
             username: user.username, 
             role: user.role 
+            // Puedes añadir más campos aquí si AuthContext o el frontend los necesitan
+            // por ejemplo, el plan: plan: user.plan
         }
     });
+    // --- FIN AJUSTE ---
 
   } catch (error) {
     console.error("Error en el controlador de login (Backend):", error);
