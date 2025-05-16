@@ -5,37 +5,34 @@ const videoSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: "", trim: true },
   url: { type: String, required: true, trim: true },
-  tipo: { // 'pelicula' o 'serie'. 'canal' no debería estar aquí si tienes un modelo Channel.
+  tipo: { // 'pelicula' o 'serie'.
     type: String, 
-    required: true, // Hacerlo requerido para una lógica clara
+    required: true,
     enum: ["pelicula", "serie"] 
   },
-  
-  // NUEVOS CAMPOS PARA CATEGORIZACIÓN AVANZADA
-  mainSection: { // Sección principal a la que pertenece (ej. "CINE_2025", "CINE_4K", "ESTRENOS")
+  mainSection: { // Sección principal a la que pertenece
     type: String,
     trim: true,
-    // Podrías definir un enum si tienes un conjunto fijo de secciones principales
-    // enum: ["CINE_2025", "CINE_4K", "ESTRENOS_GENERALES", "CLASICOS", "POR_GENERO"],
-    default: "ESTRENOS_GENERALES", // Un default genérico
+    enum: [ // Valores actualizados según tus últimas indicaciones
+        "POR_GENERO",       // Usado como agrupador principal o default
+        "ESPECIALES",       // Para contenido temático, plan básico
+        "CINE_2025",        // Estrenos recientes, plan premium/cinéfilo
+        "CINE_4K",          // Plan premium/cinéfilo
+        "CINE_60FPS"        // Plan premium/cinéfilo
+    ],
+    default: "POR_GENERO", // Default si no se especifica o para contenido general por género
     index: true
   },
   genres: [{ // Array de géneros (ej. ["Acción", "Aventura", "Sci-Fi"])
     type: String,
     trim: true,
   }],
-  // El campo 'category' existente podría usarse como un género principal si no quieres un array,
-  // o puedes renombrarlo/reutilizarlo. Por ahora, 'genres' es más flexible.
-  // category: { type: String, default: 'general', trim: true }, 
-
   requiresPlan: { // Plan mínimo requerido para ver este contenido
     type: String,
-    enum: ['basico', 'premium', 'cinefilo'], // Ajusta según tus nombres de planes
-    default: 'basico',
+    enum: ['basico', 'premium', 'cinefilo'], // Tus niveles de plan
+    default: 'basico', // Por defecto, el contenido es básico a menos que se especifique lo contrario
     index: true
   },
-  // --- FIN NUEVOS CAMPOS ---
-
   releaseYear: { type: Number },
   isFeatured: { type: Boolean, default: false }, // Para la sección "Destacados" en Home
   active: { type: Boolean, default: true }, // Para activar/desactivar VOD
@@ -51,9 +48,10 @@ const videoSchema = new mongoose.Schema({
   timestamps: true // Maneja createdAt y updatedAt automáticamente
 });
 
-// Índices compuestos pueden ser útiles
+// Índices
 videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 });
-videoSchema.index({ genres: 1, active: 1 }); // Para búsquedas por género
+videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 }); // Añadido requiresPlan aquí también
 videoSchema.index({ title: 'text', description: 'text' }); // Para búsqueda de texto
+videoSchema.index({ tipo: 1, isFeatured: 1, active: 1, requiresPlan: 1 }); // Para destacados
 
 export default mongoose.model("Video", videoSchema);
