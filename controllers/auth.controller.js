@@ -1,117 +1,105 @@
-// iptv-backend/controllers/auth.controller.js
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import User from "../models/User.js"; // Asegúrate que el path a tu modelo User sea correcto
+// iptv-frontend/src/context/AuthContext.jsx
+import React, { createContext, useContext, useState, useEffect } from "react";
 
-// Registro de nuevos usuarios
-export const register = async (req, res, next) => {
-  try {
-    const { username, password } = req.body;
+const AuthContext = createContext();
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+
+  useEffect(() => {
+    console.log("AuthContext: Verificando sesión almacenada...");
+    try {
+      const storedUserString = localStorage.getItem("user");
+      const token = localStorage.getItem("token");
+
+      if (storedUserString && token) {
+        const storedUser = JSON.parse(storedUserString);
+        setUser({
+          username: storedUser.username,
+          role: storedUser.role,
+          plan: storedUser.plan, // Cargar plan desde localStorage
+          token
+        });
+        console.log("AuthContext: Sesión restaurada desde localStorage.", {
+          username: storedUser.username,
+          role: storedUser.role,
+          plan: storedUser.plan,
+          tokenLoaded: !!token
+        });
+      } else {
+        console.log("AuthContext: No se encontró sesión almacenada.");
+        setUser(null);
+      }
+    } catch (error) {
+      console.error("AuthContext: Error al parsear datos de localStorage", error);
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      setUser(null);
+    } finally {
+      setIsLoadingAuth(false);
+      console.log("AuthContext: Verificación inicial de auth completada. isLoadingAuth:", false);
     }
-    if (password.length < 6) {
-        return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres." });
-    }
+  }, []);
 
-    // Verificar si el usuario ya existe (sensible a mayúsculas/minúsculas)
-    const existingUser = await User.findOne({ username: username }); 
-    if (existingUser) {
-      return res.status(409).json({ error: "El nombre de usuario ya está en uso." });
-    }
-    
-    const user = new User({ 
-        username: username, // Se guarda tal cual (sensible a mayúsculas/minúsculas)
-        password: password, // El hook pre-save en el modelo User.js se encargará del hash
-        // isActive y role usarán los defaults del modelo User.js (ej. isActive: false, role: 'user')
-        // plan usará el default 'basico' del modelo User.js
-    });
-    await user.save();
-    
-    res.status(201).json({ message: "Registro exitoso. Tu cuenta está pendiente de aprobación." });
-
-  } catch (error) {
-    if (error.code === 11000) { // Error de duplicado de MongoDB
-        return res.status(409).json({ error: "El nombre de usuario ya está en uso (error de base de datos)." });
-    }
-    console.error("Error en el controlador de registro (Backend):", error);
-    next(error);
-  }
-};
-
-// Login de usuarios
-// iptv-backend/controllers/auth.controller.js
-// ... (otros imports y la función register) ...
-
-export const login = async (req, res, next) => {
-  try {
-    const { username, password, deviceId } = req.body;
-
-    console.log(`LOGIN CONTROLLER (Backend): Intento de login para username (raw): '${username}'`);
-
-    if (!username || !password) {
-        return res.status(400).json({ error: "Nombre de usuario y contraseña son requeridos." });
-    }
-
-    const user = await User.findOne({ username: username }).select('+password'); 
-
-    if (!user) {
-      console.log(`LOGIN CONTROLLER (Backend): Usuario '${username}' NO ENCONTRADO en la BD.`);
-      return res.status(401).json({ error: "Credenciales inválidas." }); 
-    }
-    
-    console.log("LOGIN CONTROLLER (Backend): Usuario encontrado:", user.username, "Role:", user.role, "Plan:", user.plan, "isActive:", user.isActive, "expiresAt:", user.expiresAt);
-
-    if (!user.isActive) {
-      return res.status(403).json({ error: "Tu cuenta está inactiva o pendiente de aprobación." });
-    }
-    if (user.expiresAt && user.expiresAt < new Date()) {
-      return res.status(403).json({ error: "Tu suscripción ha expirado." });
+  // userDataFromBackend se espera que sea { token: "...", user: { username: "...", role: "...", plan: "..." } }
+  const login = (userDataFromBackend) => {
+    console.log("AuthContext: login() llamado con:", userDataFromBackend); // Para depurar qué llega
+    if (
+      !userDataFromBackend ||
+      !userDataFromBackend.token ||
+      !userDataFromBackend.user ||
+      !userDataFromBackend.user.username ||
+      typeof userDataFromBackend.user.role === 'undefined' ||
+      typeof userDataFromBackend.user.plan === 'undefined' // Asegurar que el plan también venga
+    ) {
+      console.error("AuthContext: Intento de login con datos incompletos desde el backend. Se esperaba {token, user:{username,role,plan}}", userDataFromBackend);
+      return; 
     }
 
-    const isMatch = await user.comparePassword(password);
-    
-    if (!isMatch) {
-      return res.status(401).json({ error: "Credenciales inválidas." });
-    }
-
-    const isAdminUser = user.role === 'admin';
-    if (!isAdminUser && user.deviceId && user.deviceId !== deviceId && deviceId) {
-      return res.status(403).json({ 
-        error: "Esta cuenta ya está activa en otro dispositivo. Cierra la sesión anterior para continuar." 
-      });
-    }
-    if (!isAdminUser && deviceId && (!user.deviceId || user.deviceId !== deviceId)) {
-      user.deviceId = deviceId;
-      await user.save(); 
-      console.log(`LOGIN CONTROLLER (Backend): DeviceId actualizado para ${user.username} a ${deviceId}`);
-    }
-
-    const payload = { 
-        id: user._id, 
-        role: user.role,
-        username: user.username,
-        plan: user.plan 
+    const userToStoreInStateAndLocalStorage = {
+      username: userDataFromBackend.user.username,
+      role: userDataFromBackend.user.role,
+      plan: userDataFromBackend.user.plan // Almacenar el plan
     };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    const responsePayloadForFrontend = { 
-        token, 
-        user: { // <--- OBJETO 'user' ANIDADO
-            username: user.username, 
-            role: user.role,
-            plan: user.plan // <--- ASEGÚRATE DE QUE user.plan SE ESTÉ OBTENIENDO Y ENVIANDO
-        }
+    localStorage.setItem("user", JSON.stringify(userToStoreInStateAndLocalStorage));
+    localStorage.setItem("token", userDataFromBackend.token);
+
+    const userForState = {
+      ...userToStoreInStateAndLocalStorage,
+      token: userDataFromBackend.token
     };
-    
-    console.log("LOGIN BACKEND: Login exitoso para:", user.username, "Rol:", user.role, "Plan:", user.plan);
-    console.log("LOGIN BACKEND: Payload a enviar al frontend:", JSON.stringify(responsePayloadForFrontend)); // Log para verificar
+    setUser(userForState);
+    console.log("AuthContext: Usuario logueado y estado establecido:", userForState);
+  };
 
-    res.json(responsePayloadForFrontend); // <--- ENVÍA EL PAYLOAD CON EL USER ANIDADO
+  const logout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    setUser(null);
+    console.log("AuthContext: Usuario deslogueado.");
+  };
 
-  } catch (error) {
-    console.error("Error en el controlador de login (Backend):", error);
-    next(error);
+  const contextValue = {
+    user,
+    login,
+    logout,
+    isLoadingAuth,
+    token: user?.token
+  };
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth debe ser usado dentro de un AuthProvider");
   }
-};
+  return context;
+}

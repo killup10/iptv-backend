@@ -1,24 +1,52 @@
-// routes/channels.routes.js
+// iptv-backend/routes/channels.routes.js
 import express from "express";
-import Channel from "../models/Channel.js"; // Asegúrate que la ruta a tu modelo Channel sea correcta
+import Channel from "../models/Channel.js";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
-import getTMDBThumbnail from "../utils/getTMDBThumbnail.js"; // Usado en POST /
+import multer from "multer"; // Para manejar subida de archivos M3U
 
 const router = express.Router();
 
-// Obtener todos los canales activos (PÚBLICO para Home, y para usuarios logueados)
-// Frontend usa esto para 'fetchFeaturedChannels' y 'fetchUserChannels'
+// Configuración de Multer para subida de archivos en memoria
+const storage = multer.memoryStorage();
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // Límite de 10MB
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === "application/octet-stream" || 
+            file.mimetype === "audio/mpegurl" || 
+            file.mimetype === "application/vnd.apple.mpegurl" || 
+            file.originalname.endsWith('.m3u') || 
+            file.originalname.endsWith('.m3u8')) {
+            cb(null, true);
+        } else {
+            cb(new Error("Tipo de archivo no permitido para M3U. Solo .m3u o .m3u8."), false);
+        }
+    }
+});
+
+// --- RUTAS PARA USUARIOS (prefijo /api/channels/...) ---
+
+// GET /api/channels/list 
+// Usado por fetchUserChannels y fetchFeaturedChannels (frontend filtrará por isFeatured si es necesario)
 router.get("/list", async (req, res) => {
   try {
-    // Si req.user existe (de un verifyToken opcional que podrías añadir aquí en el futuro),
-    // podrías filtrar por plan del usuario. Por ahora, devuelve todos los activos.
-    const channels = await Channel.find({ active: true }).sort({ name: 1 });
+    let query = { active: true };
+    // Si se pasa un parámetro ?featured=true, filtrar por canales destacados.
+    if (req.query.featured === 'true') {
+        query.isFeatured = true;
+    }
+
+    const channels = await Channel.find(query).sort({ name: 1 });
+
     const data = channels.map(c => ({
-      id: c._id, // Frontend espera 'id'
+      id: c._id,
       name: c.name,
-      thumbnail: c.logo || "", // Frontend usa 'thumbnail'
+      thumbnail: c.logo || "", 
       url: c.url,
-      category: c.category || "general"
+      category: c.category || "GENERAL",
+      description: c.description || "",
+      requiresPlan: c.requiresPlan || "gplay",
+      isFeatured: c.isFeatured || false
     }));
     res.json(data);
   } catch (error) {
@@ -27,30 +55,41 @@ router.get("/list", async (req, res) => {
   }
 });
 
-// NUEVO: Obtener un canal específico por ID (Protegido, para la página de reproducción Watch.jsx)
-router.get("/id/:id", verifyToken, async (req, res) => { // Usamos /id/:id para ser más específicos
+// GET /api/channels/id/:id (Para la página Watch.jsx)
+router.get("/id/:id", verifyToken, async (req, res) => {
   try {
     const channel = await Channel.findById(req.params.id);
     
     if (!channel) {
       return res.status(404).json({ error: "Canal no encontrado" });
     }
-    if (!channel.active && (!req.user || req.user.role !== 'admin')) { // Solo admins pueden ver canales inactivos
+
+    const userPlan = req.user?.plan || 'gplay';
+    const userRole = req.user?.role;
+    const planHierarchy = { 'gplay': 1, 'cinefilo': 2, 'sports': 3, 'premium': 4 }; 
+    
+    const channelRequiredPlanLevel = planHierarchy[channel.requiresPlan] || 0;
+    const userPlanLevel = planHierarchy[userPlan] || 0;
+
+    if (!channel.active && userRole !== 'admin') {
         return res.status(403).json({ error: "Este canal no está activo actualmente." });
     }
+    if (userRole !== 'admin' && channelRequiredPlanLevel > userPlanLevel) {
+        return res.status(403).json({ error: `Acceso denegado. Se requiere plan '${channel.requiresPlan}' o superior. Tu plan es '${userPlan}'.` });
+    }
 
-    // Devolver el objeto canal completo o mapearlo si es necesario
-    // Watch.jsx espera: id, name (o title/titulo), url, description (opcional)
     res.json({ 
       id: channel._id,
-      _id: channel._id, // A veces útil tener ambos
-      name: channel.name, // Watch.jsx usa 'name' para el título
+      _id: channel._id,
+      name: channel.name,
       url: channel.url,
-      logo: channel.logo, // O thumbnail si prefieres ese nombre consistentemente
+      logo: channel.logo,
       thumbnail: channel.logo,
       category: channel.category,
-      description: channel.description || "", // Añade description si tu modelo Channel lo tiene
-      active: channel.active
+      description: channel.description || "",
+      active: channel.active,
+      isFeatured: channel.isFeatured,
+      requiresPlan: channel.requiresPlan
     });
   } catch (error) {
     console.error(`Error al obtener canal por ID (${req.params.id}):`, error);
@@ -61,117 +100,270 @@ router.get("/id/:id", verifyToken, async (req, res) => { // Usamos /id/:id para 
   }
 });
 
-// Agregar un canal (Admin)
-router.post("/", verifyToken, isAdmin, async (req, res) => {
-  try {
-    const { name, url, category, logo, description } = req.body; // Añadido description
-    if (!name || !url) {
-      return res.status(400).json({ error: "Nombre y URL son requeridos" });
-    }
+// GET /api/channels/main-sections (Para LiveTVPage.jsx)
+router.get("/main-sections", verifyToken, async (req, res) => {
+    try {
+        const userPlan = req.user?.plan || 'gplay';
+        const userRole = req.user?.role;
 
-    const exists = await Channel.findOne({ url });
-    if (exists) {
-      return res.status(400).json({ error: "Ya existe un canal con esta URL" });
-    }
+        // --- ¡IMPORTANTE! PERSONALIZA ESTA LISTA DE SECCIONES ---
+        const allDefinedSections = [
+            { key: "GPLAY_GENERAL", displayName: "Canales GPlay", requiresPlan: "gplay", categoriesIncluded: ["GENERAL", "NOTICIAS", "INFANTILES", "VARIADOS", "MUSICA", "NOTICIAS BASICAS", "INFANTILES BASICOS", "ENTRETENIMIENTO GENERAL"], order: 1, thumbnailSample: "/img/sections/gplay_general.jpg" },
+            { key: "CINEFILO_PLUS", displayName: "Cinéfilo Plus", requiresPlan: "cinefilo", categoriesIncluded: ["PELIS", "SERIES", "CULTURA", "DOCUMENTALES"], order: 2, thumbnailSample: "/img/sections/cinefilo_plus.jpg" },
+            { key: "SPORTS_TOTAL", displayName: "Deportes Total", requiresPlan: "sports", categoriesIncluded: ["DEPORTES", "EVENTOS DEPORTIVOS"], order: 5, thumbnailSample: "/img/sections/sports_total.jpg" },
+            { key: "PREMIUM_LOCALES", displayName: "Canales Locales (Premium)", requiresPlan: "premium", categoriesIncluded: ["LOCALES"], order: 10, thumbnailSample: "/img/sections/premium_locales.jpg" },
+            { key: "PREMIUM_NOVELAS", displayName: "Novelas (Premium)", requiresPlan: "premium", categoriesIncluded: ["NOVELAS"], order: 11, thumbnailSample: "/img/sections/premium_novelas.jpg" },
+            { key: "PREMIUM_VARIADOS_FULL", displayName: "Variados Full (Premium)", requiresPlan: "premium", categoriesIncluded: ["VARIADOS PREMIUM", "ENTRETENIMIENTO VIP"], order: 12, thumbnailSample: "/img/sections/premium_variados.jpg" },
+            { key: "PREMIUM_CINE_TOTAL", displayName: "Cine Total (Premium)", requiresPlan: "premium", categoriesIncluded: ["PELIS PREMIUM", "ESTRENOS CINE"], order: 13, thumbnailSample: "/img/sections/premium_pelis.jpg" },
+            { key: "PREMIUM_INFANTILES_PLUS", displayName: "Infantiles Plus (Premium)", requiresPlan: "premium", categoriesIncluded: ["INFANTILES PREMIUM"], order: 14, thumbnailSample: "/img/sections/premium_infantiles.jpg" },
+            { key: "PREMIUM_DEPORTES_MAX", displayName: "Deportes Max (Premium)", requiresPlan: "premium", categoriesIncluded: ["DEPORTES", "DEPORTES PREMIUM", "EVENTOS DEPORTIVOS", "FUTBOL TOTAL"], order: 15, thumbnailSample: "/img/sections/premium_deportes.jpg" },
+            { key: "PREMIUM_CULTURA_HD", displayName: "Cultura y Documentales HD (Premium)", requiresPlan: "premium", categoriesIncluded: ["CULTURA PREMIUM", "DOCUMENTALES VIP"], order: 16, thumbnailSample: "/img/sections/premium_cultura.jpg" },
+            { key: "PREMIUM_INFO_GLOBAL", displayName: "Informativos Global (Premium)", requiresPlan: "premium", categoriesIncluded: ["NOTICIAS INTERNACIONALES", "FINANZAS", "INFORMATIVO"], order: 17, thumbnailSample: "/img/sections/premium_info.jpg" },
+        ];
+        // Ajusta la jerarquía de tus planes si es diferente
+        const planHierarchy = { 'gplay': 1, 'cinefilo': 2, 'sports': 3, 'premium': 4 }; 
+        const currentUserPlanLevel = planHierarchy[userPlan] || 0;
 
-    let finalLogo = logo;
-    if (!finalLogo && name) { // Solo busca en TMDB si no se provee logo y hay nombre
-        try {
-            finalLogo = await getTMDBThumbnail(name, 'tv'); // 'tv' para canales
-        } catch (tmdbError) {
-            console.warn(`TMDB (crear canal): No se pudo obtener logo para "${name}": ${tmdbError.message}`);
-            finalLogo = "";
+        let accessibleSections = [];
+        if (userRole === 'admin') {
+            accessibleSections = allDefinedSections;
+        } else {
+            accessibleSections = allDefinedSections.filter(section => {
+                const requiredPlanLevel = planHierarchy[section.requiresPlan] || 0;
+                return currentUserPlanLevel >= requiredPlanLevel;
+            });
         }
+        
+        res.json(accessibleSections.sort((a, b) => a.order - b.order));
+    } catch (error) {
+        console.error("Error al obtener secciones principales de canales:", error);
+        res.status(500).json({ error: "Error al obtener las secciones de canales" });
+    }
+});
+
+// --- RUTAS SOLO PARA ADMINISTRADORES (prefijo /api/channels/admin/...) ---
+
+// GET /api/channels/admin/list (Para AdminPanel)
+router.get("/admin/list", verifyToken, isAdmin, async (req, res) => {
+    try {
+        const channels = await Channel.find({}).sort({ name: 1 });
+        res.json(channels.map(c => ({ // Enviar datos completos para el admin
+            id: c._id,
+            _id: c._id, // Incluir _id también puede ser útil
+            name: c.name,
+            url: c.url,
+            logo: c.logo,
+            category: c.category,
+            description: c.description,
+            active: c.active,
+            isFeatured: c.isFeatured,
+            requiresPlan: c.requiresPlan,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt
+        })));
+    } catch (error) {
+        console.error("Error al obtener todos los canales para admin:", error);
+        res.status(500).json({ error: "Error al obtener la lista completa de canales" });
+    }
+});
+
+// POST /api/channels/admin (Para AdminPanel - Crear Canal)
+router.post("/admin", verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { name, url, category, logo, description, active, isFeatured, requiresPlan } = req.body;
+    
+    if (!name || !url) {
+      return res.status(400).json({ error: "El nombre y la URL del canal son requeridos." });
+    }
+
+    const existingChannel = await Channel.findOne({ $or: [{ name }, { url }] });
+    if (existingChannel) {
+      return res.status(409).json({ error: `Ya existe un canal con ese nombre o URL.` });
     }
 
     const newChannel = new Channel({
       name,
       url,
-      category: category || "general",
-      logo: finalLogo || "",
-      description: description || "", // Añadido description
-      active: true,
-      // user: req.user.id, // Si tu modelo Channel tiene campo 'user' y quieres asociar quién lo creó
+      category: category || "GENERAL",
+      logo: logo || "",
+      description: description || "",
+      active: active !== undefined ? active : true,
+      isFeatured: isFeatured || false,
+      requiresPlan: requiresPlan || "gplay",
     });
 
     const savedChannel = await newChannel.save();
-    // Devolver el canal en el formato que el frontend podría esperar (similar a GET /id/:id)
-    res.status(201).json({
-      id: savedChannel._id,
-      name: savedChannel.name,
-      thumbnail: savedChannel.logo,
-      url: savedChannel.url,
-      category: savedChannel.category,
-      description: savedChannel.description,
-      active: savedChannel.active
-    });
+    res.status(201).json(savedChannel); // Devolver el documento completo guardado
   } catch (error) {
-    console.error("Error al crear canal:", error);
-    // Si hay error de validación de Mongoose, podría ser más específico
+    console.error("Error al crear canal (admin):", error);
     if (error.name === 'ValidationError') {
-        return res.status(400).json({ error: "Error de validación", details: error.errors });
+      return res.status(400).json({ error: "Error de validación al crear el canal.", details: error.errors });
     }
-    res.status(400).json({ error: "Error al crear canal" });
+    res.status(500).json({ error: "Error interno al crear el canal." });
   }
 });
 
-// Actualizar canal (Admin)
-router.put("/:id", verifyToken, isAdmin, async (req, res) => {
+// PUT /api/channels/admin/:id (Para AdminPanel - Actualizar Canal)
+router.put("/admin/:id", verifyToken, isAdmin, async (req, res) => {
   try {
-    const { name, url, category, logo, active, description } = req.body; // Añadido description
-    // Podrías querer validar que al menos name y url vengan
-    // if (!name || !url) return res.status(400).json({ error: "Nombre y URL son requeridos" });
+    const channelId = req.params.id;
+    const { name, url, category, logo, description, active, isFeatured, requiresPlan } = req.body;
 
-    const updateData = { ...req.body, updatedAt: Date.now() };
-    // Si logo es undefined en req.body, no lo actualices para no borrarlo si no se envía.
-    // Si se envía un string vacío "", sí se actualiza (borra el logo).
-    // Similar para otros campos opcionales.
-    // Mongoose por defecto solo actualiza los campos presentes en el objeto de actualización.
+    const updateData = {
+        name, url, category, logo, description, 
+        active, isFeatured, requiresPlan,
+        updatedAt: Date.now()
+    };
+    
+    Object.keys(updateData).forEach(key => {
+        // Permitir enviar false, pero no undefined (a menos que quieras borrar el campo, lo cual es raro para PUT)
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    });
+    
+    // No actualizar si solo se envía updatedAt o si updateData está vacío
+    if (Object.keys(updateData).length <= 1 && updateData.updatedAt) {
+        const channelExists = await Channel.findById(channelId);
+        if (!channelExists) return res.status(404).json({ error: "Canal no encontrado." });
+        return res.json(channelExists); // Devuelve el canal sin cambios si no hay nada que actualizar
+    }
 
     const updatedChannel = await Channel.findByIdAndUpdate(
-      req.params.id,
-      updateData, // Pasa todos los campos del body que coincidan con el schema
-      { new: true } // Devuelve el documento actualizado
+      channelId,
+      { $set: updateData },
+      { new: true, runValidators: true }
     );
 
     if (!updatedChannel) {
-      return res.status(404).json({ error: "Canal no encontrado" });
+      return res.status(404).json({ error: "Canal no encontrado para actualizar." });
     }
 
-    res.json({
-      id: updatedChannel._id,
-      name: updatedChannel.name,
-      thumbnail: updatedChannel.logo,
-      url: updatedChannel.url,
-      category: updatedChannel.category,
-      description: updatedChannel.description,
-      active: updatedChannel.active
-    });
+    res.json(updatedChannel); // Devolver el documento completo actualizado
   } catch (error) {
     console.error(`Error al actualizar canal (${req.params.id}):`, error);
     if (error.name === 'ValidationError') {
-        return res.status(400).json({ error: "Error de validación", details: error.errors });
+      return res.status(400).json({ error: "Error de validación al actualizar canal.", details: error.errors });
     }
     if (error.kind === 'ObjectId') {
-        return res.status(400).json({ error: "ID de canal inválido" });
+      return res.status(400).json({ error: "ID de canal inválido." });
     }
-    res.status(500).json({ error: "Error al actualizar canal" });
+    res.status(500).json({ error: "Error interno al actualizar el canal." });
   }
 });
 
-// Eliminar canal (Admin)
-router.delete("/:id", verifyToken, isAdmin, async (req, res) => {
+// DELETE /api/channels/admin/:id (Para AdminPanel - Eliminar Canal)
+router.delete("/admin/:id", verifyToken, isAdmin, async (req, res) => {
   try {
-    const deleted = await Channel.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Canal no encontrado" });
-    res.json({ message: "Canal eliminado correctamente" });
+    const channelId = req.params.id;
+    const deletedChannel = await Channel.findByIdAndDelete(channelId);
+
+    if (!deletedChannel) {
+      return res.status(404).json({ error: "Canal no encontrado para eliminar." });
+    }
+    res.json({ message: "Canal eliminado correctamente.", id: channelId });
   } catch (error) {
     console.error(`Error al eliminar canal (${req.params.id}):`, error);
     if (error.kind === 'ObjectId') {
-        return res.status(400).json({ error: "ID de canal inválido" });
+      return res.status(400).json({ error: "ID de canal inválido." });
     }
-    res.status(500).json({ error: "Error al eliminar canal" });
+    res.status(500).json({ error: "Error interno al eliminar el canal." });
   }
 });
+
+// POST /api/channels/admin/process-m3u (Para AdminPanel - Subir M3U)
+router.post("/admin/process-m3u", verifyToken, isAdmin, upload.single('m3uFile'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "No se subió ningún archivo M3U." });
+    }
+    try {
+        const m3uContent = req.file.buffer.toString('utf8');
+        // Aquí va tu lógica compleja para parsear el contenido M3U
+        // y luego iterar para crear o actualizar canales en la base de datos.
+        // Esto es solo un placeholder de la lógica.
+        
+        const lines = m3uContent.split('\n');
+        let channelsProcessed = 0;
+        let channelsAdded = 0;
+        let channelsUpdated = 0;
+        let currentChannelInfo = {};
+
+        for (const line of lines) {
+            if (line.startsWith('#EXTINF:')) {
+                // Reset para nuevo canal
+                currentChannelInfo = { name: '', logo: '', category: 'M3U Import', url: '' };
+                
+                const infoMatch = line.match(/#EXTINF:-?\d+([^,]*),(.*)/);
+                if (infoMatch && infoMatch[2]) {
+                    currentChannelInfo.name = infoMatch[2].trim();
+                }
+
+                // Intentar extraer tvg-logo (logo)
+                const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+                if (logoMatch && logoMatch[1]) {
+                    currentChannelInfo.logo = logoMatch[1];
+                }
+                
+                // Intentar extraer group-title (category)
+                const groupMatch = line.match(/group-title="([^"]+)"/);
+                if (groupMatch && groupMatch[1]) {
+                    currentChannelInfo.category = groupMatch[1].trim() || "M3U Import";
+                }
+
+            } else if (line.trim() && !line.startsWith('#') && currentChannelInfo.name) {
+                currentChannelInfo.url = line.trim();
+                
+                // Lógica para guardar/actualizar el canal
+                if (currentChannelInfo.name && currentChannelInfo.url) {
+                    channelsProcessed++;
+                    try {
+                        const existingChannel = await Channel.findOne({ url: currentChannelInfo.url });
+                        if (existingChannel) {
+                            // Actualizar si es necesario (ej. nombre, logo, categoría)
+                            let  isChanged = false;
+                            if(existingChannel.name !== currentChannelInfo.name) {existingChannel.name = currentChannelInfo.name; isChanged = true;}
+                            if(existingChannel.logo !== currentChannelInfo.logo && currentChannelInfo.logo) {existingChannel.logo = currentChannelInfo.logo; isChanged = true;}
+                            if(existingChannel.category !== currentChannelInfo.category && currentChannelInfo.category) {existingChannel.category = currentChannelInfo.category; isChanged = true;}
+                            
+                            if(isChanged) {
+                                existingChannel.updatedAt = Date.now();
+                                await existingChannel.save();
+                                channelsUpdated++;
+                            }
+                        } else {
+                            const newChannel = new Channel({
+                                name: currentChannelInfo.name,
+                                url: currentChannelInfo.url,
+                                logo: currentChannelInfo.logo,
+                                category: currentChannelInfo.category,
+                                description: "Importado de M3U",
+                                active: true,
+                                isFeatured: false, // Por defecto no destacado
+                                requiresPlan: 'gplay' // Plan base por defecto
+                            });
+                            await newChannel.save();
+                            channelsAdded++;
+                        }
+                    } catch (dbError) {
+                        console.error("Error guardando canal de M3U:", currentChannelInfo.name, dbError.message);
+                    }
+                }
+                currentChannelInfo = {}; // Reset para el siguiente
+            }
+        }
+
+        res.json({ 
+            message: `Archivo M3U "${req.file.originalname}" procesado.`,
+            channelsFoundInFile: channelsProcessed, // O un contador de #EXTINF encontrados
+            channelsAdded: channelsAdded,
+            channelsUpdated: channelsUpdated
+        });
+
+    } catch (error) {
+        console.error("Error al procesar archivo M3U:", error);
+        res.status(500).json({ error: "Error interno al procesar el archivo M3U." });
+    }
+});
+
 
 export default router;
