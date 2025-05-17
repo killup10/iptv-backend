@@ -17,22 +17,28 @@ const app = express();
 
 // --- Middlewares ---
 const allowedOrigins = [
-  "https://iptv-frontend-iota.vercel.app",
+  "https://iptv-frontend-iota.vercel.app",         // Tu URL de producción principal
   "http://localhost:5173",
-  "http://localhost:5174", // Añadido por si acaso
+  "http://localhost:5174",
   "http://localhost:3000",
+  "https://iptv-frontend-dv1wpt075-teamgs-projects.vercel.app" // <--- AÑADE ESTA LÍNEA
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
+    // No cambies esta lógica, solo la lista de arriba
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       console.warn(`CORS: Origen no permitido: ${origin}`);
-      callback(new Error(`Origen ${origin} no permitido por CORS.`)); // Error más descriptivo
+      // Es mejor devolver un error que el navegador entienda como CORS,
+      // en lugar de que el middleware lance un error genérico no manejado.
+      // El propio paquete 'cors' suele manejar esto bien si la función origin devuelve false o un error.
+      // La forma en que lo tienes (callback(new Error(...))) es explícita.
+      callback(new Error(`Origen ${origin} no permitido por CORS.`));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+ methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
