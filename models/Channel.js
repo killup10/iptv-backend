@@ -1,47 +1,55 @@
-// models/Channel.js
+// iptv-backend/models/Channel.js
 import mongoose from "mongoose";
 
 const channelSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, "El nombre del canal es requerido."], // Añadido mensaje de error
+    required: [true, "El nombre del canal es requerido."],
     trim: true
   },
   url: {
     type: String,
-    required: [true, "La URL del canal es requerida."], // Añadido mensaje de error
+    required: [true, "La URL del canal es requerida."],
     trim: true
-    // Podrías añadir una validación de formato de URL si quieres
   },
   category: {
     type: String,
-    default: 'GENERAL', // Considera usar mayúsculas para consistencia si tus CATEGORY_OPTIONS son así
+    default: 'GENERAL',
     trim: true
   },
   logo: {
     type: String,
-    default: '' // Puedes poner una URL a un logo placeholder por defecto si quieres
+    default: '' // Puedes poner una URL a un logo placeholder por defecto
   },
   description: {
     type: String,
     default: '',
     trim: true
   },
-  active: { // 'active' ya lo tenías, lo renombro a isActive para consistencia con VODs si prefieres, pero 'active' está bien
+  active: {
     type: Boolean,
     default: true
   },
-  isFeatured: { // <--- CAMPO AÑADIDO
+  isFeatured: {
     type: Boolean,
     default: false
   },
-  requiresPlan: { // <--- CAMPO AÑADIDO
-    type: String,
-    enum: ['gplay', 'cinefilo', 'sports', 'premium'], // Ajusta estos valores a tus planes exactos
-    default: 'gplay', // O el plan más básico
-    trim: true
+  // CAMBIO: requiresPlan ahora es un array de strings
+  requiresPlan: {
+    type: [{
+      type: String,
+      enum: ['gplay', 'cinefilo', 'sports', 'premium', 'free_preview'], // Tus planes + posible 'free_preview'
+    }],
+    default: ['gplay'] // Por defecto, accesible por el plan más básico o el que definas como base
   },
-  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Si decides asociar canales a usuarios específicos (dueños)
+  // NUEVO CAMPO: Para indicar si el canal es visible en listas para todos,
+  // aunque el acceso para reproducir siga restringido por 'requiresPlan'
+  isPubliclyVisible: {
+    type: Boolean,
+    default: false // Por defecto, un canal no es públicamente visible si requiere un plan específico
+                   // Podrías cambiar el default a true si prefieres que todos los canales se listen
+                   // y solo se restrinja el acceso al intentar verlos.
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -52,15 +60,17 @@ const channelSchema = new mongoose.Schema({
   }
 });
 
-// Hook para actualizar 'updatedAt' antes de guardar
+// Hook para actualizar 'updatedAt' antes de cualquier operación de guardado/actualización
 channelSchema.pre('save', function(next) {
-  if (this.isModified()) { // Solo actualiza si hay cambios, aunque Date.now() siempre es nuevo
-    this.updatedAt = Date.now();
-  }
+  this.updatedAt = Date.now();
   next();
 });
 
-// Opcional: Si quieres asegurar que la combinación de nombre y categoría sea única (o solo nombre)
-// channelSchema.index({ name: 1, category: 1 }, { unique: true }); // Descomenta si necesitas unicidad
+// Si usas findByIdAndUpdate, podrías necesitar un hook pre 'findOneAndUpdate'
+// o simplemente asegurar que actualizas 'updatedAt' manualmente en la ruta como ya lo haces.
+
+// Índice para búsquedas comunes (opcional pero recomendado)
+channelSchema.index({ category: 1, active: 1 });
+channelSchema.index({ name: 'text', description: 'text' }); // Para búsqueda de texto si la implementas
 
 export default mongoose.model('Channel', channelSchema);
