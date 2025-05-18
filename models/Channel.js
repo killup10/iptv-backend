@@ -12,14 +12,16 @@ const channelSchema = new mongoose.Schema({
     required: [true, "La URL del canal es requerida."],
     trim: true
   },
-  category: {
+  // CAMBIO: 'category' ahora es 'section' y es un string simple que define el admin.
+  section: { // Anteriormente 'category'
     type: String,
-    default: 'GENERAL',
-    trim: true
+    default: 'General', // Default section
+    trim: true,
+    index: true // Bueno para filtrar
   },
   logo: {
     type: String,
-    default: '' // Puedes poner una URL a un logo placeholder por defecto
+    default: ''
   },
   description: {
     type: String,
@@ -30,25 +32,20 @@ const channelSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  isFeatured: {
+  isFeatured: { // Para la sección "Destacados"
     type: Boolean,
     default: false
   },
-  // CAMBIO: requiresPlan ahora es un array de strings
-  requiresPlan: {
+  requiresPlan: { // Se mantiene como array para multiplan
     type: [{
       type: String,
-      enum: ['gplay', 'cinefilo', 'sports', 'premium', 'free_preview'], // Tus planes + posible 'free_preview'
+      enum: ['gplay', 'cinefilo', 'sports', 'premium', 'free_preview'],
     }],
-    default: ['gplay'] // Por defecto, accesible por el plan más básico o el que definas como base
+    default: ['gplay']
   },
-  // NUEVO CAMPO: Para indicar si el canal es visible en listas para todos,
-  // aunque el acceso para reproducir siga restringido por 'requiresPlan'
-  isPubliclyVisible: {
+  isPubliclyVisible: { // Se mantiene
     type: Boolean,
-    default: false // Por defecto, un canal no es públicamente visible si requiere un plan específico
-                   // Podrías cambiar el default a true si prefieres que todos los canales se listen
-                   // y solo se restrinja el acceso al intentar verlos.
+    default: true // Cambiado a true para que por defecto todos se listen, el acceso se controla al ver
   },
   createdAt: {
     type: Date,
@@ -60,17 +57,11 @@ const channelSchema = new mongoose.Schema({
   }
 });
 
-// Hook para actualizar 'updatedAt' antes de cualquier operación de guardado/actualización
 channelSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
 
-// Si usas findByIdAndUpdate, podrías necesitar un hook pre 'findOneAndUpdate'
-// o simplemente asegurar que actualizas 'updatedAt' manualmente en la ruta como ya lo haces.
-
-// Índice para búsquedas comunes (opcional pero recomendado)
-channelSchema.index({ category: 1, active: 1 });
-channelSchema.index({ name: 'text', description: 'text' }); // Para búsqueda de texto si la implementas
+channelSchema.index({ section: 1, active: 1 });
 
 export default mongoose.model('Channel', channelSchema);
