@@ -31,15 +31,34 @@ const upload = multer({
 
 // GET /api/channels/list
 router.get("/list", async (req, res) => {
-  console.log("BACKEND: /api/channels/list - Solicitud recibida.");
+  console.log("BACKEND: /api/channels/list - Solicitud recibida. Query:", req.query);
   try {
-    let query = { active: true };
+    let query = { active: true }; // Por defecto, solo canales activos
+
+    // Filtrar por canales destacados si se especifica
     if (req.query.featured === "true") {
-        query.isFeatured = true;
-        console.log("BACKEND: /api/channels/list - Filtrando por canales destacados.");
+      query.isFeatured = true;
+      console.log("BACKEND: /api/channels/list - Filtrando por canales destacados.");
     }
+
+    // Filtrar por categorías si se especifica el parámetro 'categories'
+    // El frontend debería enviar las categorías como una lista separada por comas: ?categories=CAT1,CAT2,CAT3
+    if (req.query.categories) {
+      const categoriesToSearch = req.query.categories.split(',').map(cat => cat.trim()).filter(cat => cat); // Limpia y filtra vacíos
+      if (categoriesToSearch.length > 0) {
+        query.category = { $in: categoriesToSearch };
+        console.log(`BACKEND: /api/channels/list - Filtrando por categorías: ${categoriesToSearch.join(', ')}`);
+      }
+    }
+    // Si necesitas un parámetro 'category' para una sola categoría, puedes añadir:
+    // else if (req.query.category) {
+    //   query.category = req.query.category;
+    //   console.log(`BACKEND: /api/channels/list - Filtrando por categoría: ${req.query.category}`);
+    // }
+
+
     const channels = await Channel.find(query).sort({ name: 1 });
-    console.log(`BACKEND: /api/channels/list - Canales encontrados: ${channels.length}`);
+    console.log(`BACKEND: /api/channels/list - Canales encontrados con filtro actual: ${channels.length}`);
 
     const data = channels.map((c) => ({
       id: c._id,
@@ -53,8 +72,10 @@ router.get("/list", async (req, res) => {
     }));
     res.json(data);
   } catch (err) {
-    console.error("Error en GET /api/channels/list:", err.name, err.message);
-    res.status(500).json({ error: "Error al obtener canales." });
+    console.error("Error en GET /api/channels/list:", err.name, err.message, err.stack);
+    if (!res.headersSent) {
+        res.status(500).json({ error: "Error al obtener canales." });
+    }
   }
 });
 
@@ -73,7 +94,6 @@ router.get("/id/:id", verifyToken, async (req, res) => {
     }
     console.log(`BACKEND: /api/channels/id/${req.params.id} - Canal encontrado: ${channel.name}`);
 
-    // Lógica de acceso (ya la tienes)
     const userPlan = req.user?.plan || "gplay";
     const userRole = req.user?.role;
     const planHierarchy = { gplay: 1, cinefilo: 2, sports: 3, premium: 4, };
@@ -97,7 +117,7 @@ router.get("/id/:id", verifyToken, async (req, res) => {
       isFeatured: channel.isFeatured, requiresPlan: channel.requiresPlan,
     });
   } catch (error) {
-    console.error(`Error en GET /api/channels/id/${req.params.id}:`, error.name, error.message);
+    console.error(`Error en GET /api/channels/id/${req.params.id}:`, error.name, error.message, error.stack);
     if (!res.headersSent) {
         res.status(500).json({ error: "Error interno al obtener el canal." });
     }
@@ -114,7 +134,6 @@ router.get("/main-sections", verifyToken, async (req, res) => {
     const currentLevel = planHierarchy[userPlan] || 0;
     console.log(`BACKEND: /api/channels/main-sections - UserPlan: ${userPlan}, UserRole: ${userRole}, CurrentLevel: ${currentLevel}`);
 
-    // Definición del array de secciones DENTRO del handler de la ruta o accesible en su scope
     const sections = [
         { key: "GPLAY_GENERAL", displayName: "Canales GPlay", requiresPlan: "gplay", categoriesIncluded: ["GENERAL", "NOTICIAS", "INFANTILES", "VARIADOS", "MUSICA", "NOTICIAS BASICAS", "INFANTILES BASICOS", "ENTRETENIMIENTO GENERAL"], order: 1, thumbnailSample: "/img/sections/gplay_general.jpg" },
         { key: "CINEFILO_PLUS", displayName: "Cinéfilo Plus", requiresPlan: "cinefilo", categoriesIncluded: ["PELIS", "SERIES", "CULTURA", "DOCUMENTALES"], order: 2, thumbnailSample: "/img/sections/cinefilo_plus.jpg" },
@@ -139,7 +158,7 @@ router.get("/main-sections", verifyToken, async (req, res) => {
       userRole === "admin"
         ? sections
         : sections.filter(
-            (s) => (planHierarchy[s.requiresPlan] || 0) <= currentLevel // Añadido || 0 por seguridad
+            (s) => (planHierarchy[s.requiresPlan] || 0) <= currentLevel
           );
     console.log(`BACKEND: /api/channels/main-sections - Secciones filtradas: ${filteredSections.length}. Enviando respuesta.`);
     res.json(filteredSections.sort((a, b) => a.order - b.order));
@@ -149,14 +168,10 @@ router.get("/main-sections", verifyToken, async (req, res) => {
     if (!res.headersSent) {
         res.status(500).json({ error: "Error fatal al obtener las secciones principales de canales." });
     }
-    // No necesitas 'next(err)' si ya estás enviando una respuesta JSON.
   }
 });
 
 // --- RUTAS SOLO PARA ADMINISTRADORES ---
-// (GET /admin/list, POST /admin, PUT /admin/:id, DELETE /admin/:id, POST /admin/process-m3u)
-// Asegúrate de que todas estas rutas estén definidas como en el ejemplo completo que te di antes.
-// Aquí pego de nuevo la de process-m3u con logs:
 
 router.get("/admin/list", verifyToken, isAdmin, async (req, res) => {
   console.log("BACKEND: /api/channels/admin/list - Solicitud recibida.");
@@ -171,8 +186,10 @@ router.get("/admin/list", verifyToken, isAdmin, async (req, res) => {
       }))
     );
   } catch (err) {
-    console.error("Error en GET /api/channels/admin/list:", err.name, err.message);
-    res.status(500).json({ error: "Error al obtener lista completa de canales para admin." });
+    console.error("Error en GET /api/channels/admin/list:", err.name, err.message, err.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Error al obtener lista completa de canales para admin." });
+    }
   }
 });
 
@@ -199,11 +216,14 @@ router.post("/admin", verifyToken, isAdmin, async (req, res, next) => {
     console.log("BACKEND: POST /api/channels/admin - Canal creado exitosamente:", savedChannel.name);
     res.status(201).json(savedChannel);
   } catch (error) {
-    console.error("Error en POST /api/channels/admin:", error.name, error.message);
+    console.error("Error en POST /api/channels/admin:", error.name, error.message, error.stack);
     if (error.name === 'ValidationError') {
         return res.status(400).json({ error: "Error de validación al crear canal.", details: error.errors });
     }
-    next(error); // Pasa al manejador de errores global
+    // Pasa al manejador de errores global si no es un ValidationError manejado aquí
+    if (!res.headersSent) {
+        next(error);
+    }
   }
 });
 
@@ -216,11 +236,19 @@ router.put("/admin/:id", verifyToken, isAdmin, async (req, res, next) => {
         return res.status(400).json({ error: "ID de canal inválido." });
     }
     const updateData = req.body;
-    delete updateData._id;
+    delete updateData._id; // No permitir actualizar el _id
+
+    // Lógica para evitar que campos se establezcan a null o undefined si no se envían explícitamente para borrar
+    // (El comportamiento de $set es actualizar solo los campos provistos, así que esto es más para control fino)
+    // Object.keys(updateData).forEach(key => {
+    //     if (updateData[key] === undefined) {
+    //         delete updateData[key];
+    //     }
+    // });
 
     const updatedChannel = await Channel.findByIdAndUpdate(
       channelId,
-      { $set: updateData, updatedAt: Date.now() },
+      { $set: updateData, updatedAt: Date.now() }, // $set actualiza solo los campos en updateData
       { new: true, runValidators: true }
     );
     if (!updatedChannel) {
@@ -230,11 +258,13 @@ router.put("/admin/:id", verifyToken, isAdmin, async (req, res, next) => {
     console.log(`BACKEND: PUT /api/channels/admin/${channelId} - Canal actualizado:`, updatedChannel.name);
     res.json(updatedChannel);
   } catch (error) {
-    console.error(`Error en PUT /api/channels/admin/${channelId}:`, error.name, error.message);
+    console.error(`Error en PUT /api/channels/admin/${channelId}:`, error.name, error.message, error.stack);
     if (error.name === 'ValidationError') {
         return res.status(400).json({ error: "Error de validación al actualizar canal.", details: error.errors });
     }
-    next(error);
+    if (!res.headersSent) {
+        next(error);
+    }
   }
 });
 
@@ -254,8 +284,10 @@ router.delete("/admin/:id", verifyToken, isAdmin, async (req, res, next) => {
     console.log(`BACKEND: DELETE /api/channels/admin/${channelId} - Canal eliminado:`, deletedChannel.name);
     res.json({ message: "Canal eliminado correctamente.", id: channelId });
   } catch (error) {
-    console.error(`Error en DELETE /api/channels/admin/${channelId}:`, error.name, error.message);
-    next(error);
+    console.error(`Error en DELETE /api/channels/admin/${channelId}:`, error.name, error.message, error.stack);
+    if (!res.headersSent) {
+        next(error);
+    }
   }
 });
 
@@ -297,7 +329,6 @@ router.post(
         } else if (line.trim() && !line.startsWith('#') && currentChannelInfo.name && line.trim().startsWith('http')) {
           currentChannelInfo.url = line.trim();
           if (currentChannelInfo.name && currentChannelInfo.url) {
-            // console.log(`BACKEND: /api/channels/admin/process-m3u - Procesando entrada: ${currentChannelInfo.name}`);
             try {
               const existingChannel = await Channel.findOne({ url: currentChannelInfo.url });
               if (existingChannel) {
@@ -309,13 +340,11 @@ router.post(
                   existingChannel.updatedAt = Date.now();
                   await existingChannel.save();
                   channelsUpdated++;
-                  // console.log(`BACKEND: /api/channels/admin/process-m3u - Canal ACTUALIZADO: ${existingChannel.name}`);
                 }
               } else {
                 const newChannel = new Channel(currentChannelInfo);
                 await newChannel.save();
                 channelsAdded++;
-                // console.log(`BACKEND: /api/channels/admin/process-m3u - Canal NUEVO AÑADIDO: ${newChannel.name}`);
               }
             } catch (dbError) {
               console.error("Error guardando/actualizando canal desde M3U:", currentChannelInfo.name, dbError.message, dbError.stack);
@@ -334,7 +363,6 @@ router.post(
       if (!res.headersSent) {
           res.status(500).json({ error: "Error interno fatal al procesar el archivo M3U." });
       }
-      // No llames a next(error) si ya enviaste respuesta. El manejador global es un fallback.
     }
   }
 );
