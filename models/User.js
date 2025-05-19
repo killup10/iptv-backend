@@ -1,6 +1,6 @@
 // iptv-backend/models/User.js
 import mongoose from "mongoose";
-import bcrypt from 'bcryptjs'; // Asegúrate de importar bcryptjs
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
   username: { 
@@ -8,12 +8,10 @@ const userSchema = new mongoose.Schema({
     required: true, 
     unique: true, 
     trim: true 
-    // Se quita 'lowercase: true' para mantener la sensibilidad a mayúsculas/minúsculas
   },
   password: { 
     type: String, 
     required: true 
-    // select: false // Considera añadir esto para no devolver la contraseña por defecto
   },
   isActive: { type: Boolean, default: false },
   expiresAt: { type: Date, default: null },
@@ -21,8 +19,8 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ["admin", "user"], default: "user" },
   plan: {
     type: String,
-    enum: ['basico', 'premium', 'cinefilo'],
-    default: 'basico'
+    enum: ['basico', 'estandar', 'premium', 'cinefilo', 'sports'], // 'basico' (antes gplay), 'estandar', 'premium', 'cinefilo', 'sports'
+    default: 'basico' // 'basico' es el plan por defecto
   }
 }, {
   timestamps: true
@@ -34,7 +32,7 @@ userSchema.pre('save', async function(next) {
     return next();
   }
   try {
-    const salt = await bcrypt.genSalt(10); // O 12 para más seguridad
+    const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
@@ -42,7 +40,7 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Método para comparar contraseñas (opcional, pero buena práctica)
+// Método para comparar contraseñas
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };

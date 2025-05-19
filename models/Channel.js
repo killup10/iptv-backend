@@ -12,12 +12,11 @@ const channelSchema = new mongoose.Schema({
     required: [true, "La URL del canal es requerida."],
     trim: true
   },
-  // CAMBIO: 'category' ahora es 'section' y es un string simple que define el admin.
-  section: { // Anteriormente 'category'
+  section: { 
     type: String,
-    default: 'General', // Default section
+    default: 'General',
     trim: true,
-    index: true // Bueno para filtrar
+    index: true
   },
   logo: {
     type: String,
@@ -32,20 +31,20 @@ const channelSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  isFeatured: { // Para la sección "Destacados"
+  isFeatured: { 
     type: Boolean,
     default: false
   },
-  requiresPlan: { // Se mantiene como array para multiplan
+  requiresPlan: { 
     type: [{
       type: String,
-      enum: ['gplay', 'cinefilo', 'sports', 'premium', 'free_preview'],
+      enum: ['basico', 'estandar', 'cinefilo', 'sports', 'premium', 'free_preview'], // AÑADIDO 'estandar', 'basico' (en lugar de gplay si era separado)
     }],
-    default: ['gplay']
+    default: ['basico'] // Default al plan más básico
   },
-  isPubliclyVisible: { // Se mantiene
+  isPubliclyVisible: { 
     type: Boolean,
-    default: true // Cambiado a true para que por defecto todos se listen, el acceso se controla al ver
+    default: true
   },
   createdAt: {
     type: Date,

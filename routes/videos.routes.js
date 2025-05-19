@@ -101,15 +101,40 @@ router.get("/public/featured-movies", async (req, res, next) => {
 
 // GET /api/videos/public/featured-series
 router.get("/public/featured-series", async (req, res, next) => {
+  console.log("----------------------------------------------------------");
+  console.log("BACKEND: Accediendo a /api/videos/public/featured-series");
+  console.log("Headers de la petición:", JSON.stringify(req.headers, null, 2));
+  console.log("----------------------------------------------------------");
+
+  // ---- INICIO DE PRUEBA TEMPORAL ----
+  // Descomenta la siguiente línea para probar una respuesta directa:
+  // return res.status(200).json([{ id: 'test001', title: 'Serie de Prueba Pública', name: 'Serie de Prueba Pública', thumbnail: '/img/placeholder-default.png' }]);
+  // ---- FIN DE PRUEBA TEMPORAL ----
+
   try {
     const criteria = { tipo: "serie", isFeatured: true, active: true };
     console.log("BACKEND /public/featured-series - Criterio:", criteria);
     const series = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     console.log("BACKEND /public/featured-series - Series encontradas:", series.length);
-    const mapVODToPublicFormat = (v) => ({ /* ... */ }); // Asume que tienes este mapeo
+    
+    const mapVODToPublicFormat = (v) => ({
+        id: v._id,
+        _id: v._id,
+        name: v.title,
+        title: v.title,
+        thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+        url: v.url,
+        mainSection: v.mainSection,
+        genres: v.genres,
+        tipo: v.tipo,
+        description: v.description || "",
+        trailerUrl: v.trailerUrl || ""
+    });
     res.json(series.map(mapVODToPublicFormat));
   } catch (error) { 
-    console.error("Error en BACKEND /public/featured-series:", error);
+    console.error("Error en BACKEND /public/featured-series:", error.message); // Loguea solo el mensaje
+    // También es útil loguear el error completo para más detalles si es necesario
+    // console.error(error); 
     next(error); 
   }
 });
