@@ -5,53 +5,52 @@ const videoSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: "", trim: true },
   url: { type: String, required: true, trim: true },
-  tipo: { // 'pelicula' o 'serie'.
-    type: String, 
+  tipo: {
+    type: String,
     required: true,
-    enum: ["pelicula", "serie"] 
+    enum: ["pelicula", "serie"]
   },
-  mainSection: { // Sección principal a la que pertenece
+  mainSection: {
     type: String,
     trim: true,
-    enum: [ // Valores actualizados según tus últimas indicaciones
-        "POR_GENERO",       // Usado como agrupador principal o default
-        "ESPECIALES",       // Para contenido temático, plan básico
-        "CINE_2025",        // Estrenos recientes, plan premium/cinéfilo
-        "CINE_4K",          // Plan premium/cinéfilo
-        "CINE_60FPS"        // Plan premium/cinéfilo
+    enum: [
+        "POR_GENERO",
+        "ESPECIALES",
+        "CINE_2025",
+        "CINE_4K",
+        "CINE_60FPS"
     ],
-    default: "POR_GENERO", // Default si no se especifica o para contenido general por género
+    default: "POR_GENERO",
     index: true
   },
-  genres: [{ // Array de géneros (ej. ["Acción", "Aventura", "Sci-Fi"])
+  genres: [{
     type: String,
     trim: true,
   }],
-  requiresPlan: { // Plan mínimo requerido para ver este contenido
+  requiresPlan: [{ // <--- CAMBIO: Ahora es un array de Strings
     type: String,
-    enum: ['basico', 'premium', 'cinefilo'], // Tus niveles de plan
-    default: 'basico', // Por defecto, el contenido es básico a menos que se especifique lo contrario
-    index: true
-  },
+    trim: true,
+    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"], // <--- CAMBIO: Todos tus 5 planes
+  }],
   releaseYear: { type: Number },
-  isFeatured: { type: Boolean, default: false }, // Para la sección "Destacados" en Home
-  active: { type: Boolean, default: true }, // Para activar/desactivar VOD
+  isFeatured: { type: Boolean, default: false },
+  active: { type: Boolean, default: true },
 
-  logo: { type: String, default: '' }, // Thumbnail/poster principal
+  logo: { type: String, default: '' },
   customThumbnail: { type: String, default: '' },
   tmdbThumbnail: { type: String, default: '' },
   
   trailerUrl: { type: String, default: '', trim: true },
-
-  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Quién lo subió (admin)
+  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { 
-  timestamps: true // Maneja createdAt y updatedAt automáticamente
+  timestamps: true
 });
 
-// Índices
+// Índices (se pueden mantener como están, pero considera si requiresPlan necesita un índice diferente ahora que es un array)
+// Mongoose puede indexar arrays. Si buscas VODs por un plan específico dentro del array, el índice actual podría seguir siendo útil.
 videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 });
-videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 }); // Añadido requiresPlan aquí también
-videoSchema.index({ title: 'text', description: 'text' }); // Para búsqueda de texto
-videoSchema.index({ tipo: 1, isFeatured: 1, active: 1, requiresPlan: 1 }); // Para destacados
+videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 });
+videoSchema.index({ title: 'text', description: 'text' });
+videoSchema.index({ tipo: 1, isFeatured: 1, active: 1, requiresPlan: 1 });
 
 export default mongoose.model("Video", videoSchema);
