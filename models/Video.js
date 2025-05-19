@@ -21,7 +21,6 @@ const videoSchema = new mongoose.Schema({
         "CINE_60FPS"
     ],
     default: "POR_GENERO",
-    // index: true // Se puede definir un índice compuesto más específico abajo si es necesario
   },
   genres: [{ // Array de géneros
     type: String,
@@ -30,7 +29,7 @@ const videoSchema = new mongoose.Schema({
   requiresPlan: [{ // Array de Strings para planes
     type: String,
     trim: true,
-    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"],
+    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"], // Tus 5 planes
   }],
   releaseYear: { type: Number },
   isFeatured: { type: Boolean, default: false },
@@ -41,40 +40,41 @@ const videoSchema = new mongoose.Schema({
   tmdbThumbnail: { type: String, default: '' },
   
   trailerUrl: { type: String, default: '', trim: true },
-  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Descomenta si lo necesitas
 }, { 
   timestamps: true
 });
 
-// --- ÍNDICES CORREGIDOS Y OPTIMIZADOS ---
+// --- ÍNDICES ---
 
-// 1. Índice de texto para búsquedas por título y descripción
+// 1. Índice de texto para búsquedas
 videoSchema.index({ title: 'text', description: 'text' });
 
-// 2. Índices para campos de array (MongoDB crea índices multikey para estos)
-videoSchema.index({ genres: 1 });        // Para buscar/filtrar por género
-videoSchema.index({ requiresPlan: 1 }); // Para buscar/filtrar por plan requerido
+// 2. Índices individuales para campos de array (MongoDB crea índices multikey)
+videoSchema.index({ genres: 1 });
+videoSchema.index({ requiresPlan: 1 });
 
-// 3. Índices compuestos para consultas comunes (solo campos escalares o UN campo de array)
+// 3. Índices individuales para campos de filtro comunes (si no están en compuestos)
+videoSchema.index({ mainSection: 1 });
+videoSchema.index({ active: 1 });
+videoSchema.index({ isFeatured: 1 });
+videoSchema.index({ tipo: 1 });
 
+
+// 4. Índices compuestos (con UN MÁXIMO de UN campo de array por índice)
 // Para filtrar VODs por tipo, estado de activación y si son destacados (Home y listados)
 videoSchema.index({ tipo: 1, active: 1, isFeatured: 1 });
 
-// Para filtrar por sección principal, tipo y estado de activación (útil para MoviesPage/SeriesPage)
+// Para filtrar por sección principal, tipo y estado de activación
 videoSchema.index({ mainSection: 1, tipo: 1, active: 1 });
 
-// El índice que causaba el error "cannot index parallel arrays [requiresPlan] [genres]"
-// DEBE SER ELIMINADO o REEMPLAZADO por índices individuales o compuestos que no violen la regla.
-// videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 }); // <-- ELIMINADO
+// Si necesitas filtrar por 'requiresPlan' junto con 'active' y 'tipo':
+videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 }); // Válido (tipo y active son escalares)
 
-// El siguiente índice también podría ser problemático si se considera `requiresPlan` junto con otros arrays (aunque aquí no hay otro array explícito)
-// MongoDB permite un solo campo de array en un índice compuesto.
-// Si necesitas filtrar por `requiresPlan` junto con `active` y `tipo`:
-videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 }); // Este debería ser válido (tipo y active son escalares)
+// Si necesitas filtrar por 'requiresPlan' junto con 'active' y 'mainSection':
+videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 }); // Válido
 
-// Si necesitas filtrar por `requiresPlan` junto con `active` y `mainSection`:
-videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 }); // Este debería ser válido
-
-// Asegúrate de que no haya otros índices compuestos que intenten usar 'genres' y 'requiresPlan' juntos.
+// EL ÍNDICE PROBLEMÁTICO QUE DEBE SER ELIMINADO (si aún existe en alguna versión):
+// videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 }); // <-- ASEGÚRATE QUE ESTO NO ESTÉ ACTIVO
 
 export default mongoose.model("Video", videoSchema);
