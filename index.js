@@ -3,7 +3,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
-import fetch from "node-fetch"; // Asegúrate de que node-fetch esté en tu package.json si lo usas para el proxy
+import fetch from "node-fetch"; // Asegúrate de que esté en tu package.json
 
 import m3uRoutes from "./routes/m3u.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -16,18 +16,31 @@ dotenv.config();
 const app = express();
 
 // --- Middlewares ---
-const allowedOrigins = [
-  "https://iptv-frontend-iota.vercel.app",   // Tu URL de Vercel antigua (puedes mantenerla o quitarla)
-  "http://localhost:5173",                   // Para desarrollo local del frontend
-  "http://localhost:5174",                   // Otro puerto local si lo usas
-  "http://localhost:3000",                   // Otro puerto local si lo usas
-  "https://play.teamg.store"                 // <--- TU NUEVO DOMINIO PERSONALIZADO AÑADIDO AQUÍ
-  // "https://iptv-frontend-dv1wpt075-teamgs-projects.vercel.app" // Otra URL de Vercel que tenías
-];
 
+// Tu lista original de orígenes permitidos (la comentaremos temporalmente)
+/*
+const allowedOrigins = [
+  "https://iptv-frontend-iota.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+  "https://play.teamg.store"
+];
+*/
+
+// Configuración de CORS SIMPLIFICADA PARA DEPURACIÓN
+console.log("Aplicando configuración de CORS simplificada (origin: '*') para depuración.");
+app.use(cors({
+  origin: '*', // <--- CAMBIO TEMPORAL: Permite todos los orígenes
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+
+/*
+// Tu configuración de CORS original (comentada temporalmente)
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir peticiones sin 'origin' (como las de Postman o apps móviles) O si el origen está en la lista
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -35,10 +48,11 @@ app.use(cors({
       callback(new Error(`Origen ${origin} no permitido por CORS.`));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Métodos permitidos
-  allowedHeaders: ["Content-Type", "Authorization"],    // Cabeceras permitidas
-  credentials: true                                     // Si necesitas enviar/recibir cookies o cabeceras de autorización
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
+*/
 
 app.use(express.json()); // Para parsear cuerpos JSON
 
@@ -67,11 +81,8 @@ app.get("/proxy", async (req, res) => {
       console.error(`Proxy: Error desde destino (${decodedUrl}): ${targetResponse.status} ${targetResponse.statusText}. Cuerpo: ${errorBody}`);
       return res.status(targetResponse.status).send(`Error desde destino: ${targetResponse.statusText}`);
     }
-    // Copiar cabeceras importantes de la respuesta original
     res.set({ 
         "Content-Type": targetResponse.headers.get("content-type") || "application/octet-stream",
-        // Añade otras cabeceras que el reproductor HLS pueda necesitar si el proxy las está perdiendo
-        // "Access-Control-Allow-Origin": "*", // Podrías necesitar esto si el proxy mismo sirve a un origen diferente al final
     });
     targetResponse.body.pipe(res);
   } catch (err) {
@@ -84,7 +95,7 @@ app.get("/proxy", async (req, res) => {
 
 // --- Rutas API ---
 app.get("/", (_req, res) => {
-  res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀");
+  res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀 (CORS DEBUG MODE)");
 });
 
 app.use("/api/auth", authRoutes);
@@ -95,7 +106,7 @@ app.use("/api/admin-content", adminContentRoutes);
 app.use("/api/channels", channelsRoutes); 
 
 // --- Conexión MongoDB y Arranque ---
-const PORT = process.env.PORT || 5000; // Render usa la variable PORT que ellos asignan
+const PORT = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB conectado");
@@ -106,12 +117,12 @@ mongoose.connect(process.env.MONGO_URI)
     process.exit(1);
   });
 
-// Manejador de errores global (debe ir después de todas las rutas)
+// Manejador de errores global
 app.use((err, req, res, next) => {
   console.error("--- MANEJADOR DE ERRORES GLOBAL ---");
   console.error("Path:", req.path);
   console.error("Error:", err.message);
-  if (process.env.NODE_ENV === 'development') { // No mostrar stack en producción
+  if (process.env.NODE_ENV === 'development') {
     console.error("Stack:", err.stack);
   }
   console.error("---------------------------------");
