@@ -3,7 +3,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
-import fetch from "node-fetch"; // Asegúrate de que esté en tu package.json
+import fetch from "node-fetch";
 
 import m3uRoutes from "./routes/m3u.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -16,47 +16,46 @@ dotenv.config();
 const app = express();
 
 // --- Middlewares ---
-
-// Tu lista original de orígenes permitidos (la comentaremos temporalmente)
-/*
 const allowedOrigins = [
   "https://iptv-frontend-iota.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
-  "https://play.teamg.store"
+  "https://play.teamg.store" // Asegúrate de que no haya espacios extra aquí
 ];
-*/
+console.log("Orígenes permitidos para CORS:", allowedOrigins); // Log para verificar
 
-// Configuración de CORS SIMPLIFICADA PARA DEPURACIÓN
-console.log("Aplicando configuración de CORS simplificada (origin: '*') para depuración.");
-app.use(cors({
-  origin: '*', // <--- CAMBIO TEMPORAL: Permite todos los orígenes
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
-
-/*
-// Tu configuración de CORS original (comentada temporalmente)
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Si 'origin' es undefined (peticiones del mismo origen o herramientas como Postman), permitir.
+    if (!origin) {
+      console.log("CORS: Petición sin origen permitida.");
+      return callback(null, true);
+    }
+
+    // Limpiar el origen recibido para evitar problemas con espacios
+    const trimmedOrigin = origin.trim();
+
+    if (allowedOrigins.includes(trimmedOrigin)) {
+      console.log(`CORS: Origen permitido: ${trimmedOrigin}`);
       callback(null, true);
     } else {
-      console.warn(`CORS: Origen no permitido: ${origin}`);
-      callback(new Error(`Origen ${origin} no permitido por CORS.`));
+      console.warn(`CORS: Origen NO PERMITIDO: '${trimmedOrigin}'. Orígenes permitidos: [${allowedOrigins.join(', ')}]`);
+      // Devolver un error específico de CORS para que el navegador lo maneje
+      // en lugar de un error genérico que podría ser malinterpretado.
+      // El paquete 'cors' usualmente devuelve las cabeceras correctas para un error de CORS
+      // cuando la función origin llama a callback con un error.
+      callback(new Error(`El origen '${trimmedOrigin}' no está permitido por la política CORS.`));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
-*/
 
-app.use(express.json()); // Para parsear cuerpos JSON
+app.use(express.json());
 
-// --- Proxy HLS/M3U8 (si aún lo necesitas) ---
+// --- Proxy HLS/M3U8 ---
 app.get("/proxy", async (req, res) => {
   const { url: encodedUrl } = req.query;
   if (!encodedUrl) return res.status(400).send("Falta el parámetro 'url'.");
@@ -95,7 +94,7 @@ app.get("/proxy", async (req, res) => {
 
 // --- Rutas API ---
 app.get("/", (_req, res) => {
-  res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀 (CORS DEBUG MODE)");
+  res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀");
 });
 
 app.use("/api/auth", authRoutes);
@@ -122,7 +121,7 @@ app.use((err, req, res, next) => {
   console.error("--- MANEJADOR DE ERRORES GLOBAL ---");
   console.error("Path:", req.path);
   console.error("Error:", err.message);
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) { // Muestra stack en desarrollo o si NODE_ENV no está definido
     console.error("Stack:", err.stack);
   }
   console.error("---------------------------------");
