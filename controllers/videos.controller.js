@@ -1,87 +1,136 @@
-import Video from "../models/video.model.js";
-import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
+// iptv-backend/controllers/videos.controller.js
+import Video from "../models/Video.js"; // Asegúrate que la ruta sea correcta
+import mongoose from "mongoose";
+// import getTMDBThumbnail from "../utils/getTMDBThumbnail.js"; // Descomenta si lo usas para obtener thumbnails
 
-export const getVideos = async (req, res) => {
-  try {
-    const videos = await Video.find();
-    res.json(videos);
-  } catch (error) {
-    console.error("Error al obtener videos:", error);
-    res.status(500).json({ error: "Error al obtener videos" });
+// ... (tus otras funciones de controlador: getPublicFeaturedMovies, getPublicFeaturedSeries, etc.) ...
+
+// --- FUNCIÓN PARA PROCESAR ARCHIVO DE TEXTO/M3U PARA VODS (PELÍCULAS/SERIES) ---
+export const createBatchVideosFromTextAdmin = async (req, res, next) => {
+  console.log("CTRL: createBatchVideosFromTextAdmin - Archivo recibido:", req.file ? req.file.originalname : "No hay archivo");
+  if (!req.file) {
+    return res.status(400).json({ error: "No se proporcionó ningún archivo." });
   }
-};
 
-export const getVideoById = async (req, res) => {
   try {
-    const video = await Video.findById(req.params.id);
-    if (!video) {
-      return res.status(404).json({ error: "Video no encontrado" });
+    const fileContent = req.file.buffer.toString("utf8");
+    const lines = fileContent.split(/\r?\n/);
+
+    let videosToAdd = [];
+    let currentVideoData = {}; // Usar un nombre diferente para evitar confusión con el modelo Video
+    let itemsFoundInFile = 0;
+
+    // La cabecera #EXTM3U es opcional para este parser si el formato es consistente
+    if (lines[0]?.startsWith('#EXTM3U')) {
+        console.log("CTRL: createBatchVideosFromTextAdmin - Archivo M3U detectado.");
     }
-    res.json(video);
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]?.trim();
+      if (!line) continue;
+
+      if (line.startsWith("#EXTINF:")) {
+        itemsFoundInFile++;
+        currentVideoData = { // Valores por defecto para cada VOD
+          tipo: "pelicula", // Por defecto, o podrías intentar inferirlo
+          active: true,
+          isFeatured: false,
+          mainSection: "POR_GENERO", // Sección por defecto
+          requiresPlan: ["gplay"],   // Plan básico por defecto
+          user: req.user.id,         // Admin que sube
+          genres: [],
+        };
+
+        // Extraer título (lo que viene después de la coma)
+        let titlePart = line.substring(line.lastIndexOf(",") + 1).trim();
+        
+        // Intentar extraer año del título (ej. "Mi Pelicula (2023)" o "Mi Pelicula 2023")
+        const yearMatch = titlePart.match(/\(?(\d{4})\)?$/); // Busca (YYYY) o YYYY al final
+        if (yearMatch && yearMatch[1]) {
+          currentVideoData.releaseYear = parseInt(yearMatch[1], 10);
+          // Quitar el año y los paréntesis del título
+          titlePart = titlePart.replace(/\s*\(\d{4}\)$/, '').trim();
+          titlePart = titlePart.replace(/\s+\d{4}$/, '').trim(); // Para el caso sin paréntesis
+        }
+        currentVideoData.title = titlePart;
+
+        // Intentar extraer géneros de la línea #EXTGRP: que debería estar DESPUÉS de #EXTINF
+        // y ANTES de la URL.
+        let nextLineIndex = i + 1;
+        if (lines[nextLineIndex]?.startsWith("#EXTGRP:")) {
+          const genreString = lines[nextLineIndex].substring("#EXTGRP:".length).trim();
+          currentVideoData.genres = genreString.split(/[,|]/).map(g => g.trim()).filter(g => g);
+          i = nextLineIndex; // Avanzar el índice principal ya que hemos procesado esta línea
+        }
+        
+        // Si no se encontraron géneros en #EXTGRP, y hay group-title en #EXTINF
+        if ((!currentVideoData.genres || currentVideoData.genres.length === 0)) {
+            const groupMatch = line.match(/group-title="([^"]*)"/i);
+            if (groupMatch && groupMatch[1]) {
+                currentVideoData.genres = groupMatch[1].split(/[,|]/).map(g => g.trim()).filter(g => g);
+            }
+        }
+        
+        // Fallback si no hay géneros
+        if (!currentVideoData.genres || currentVideoData.genres.length === 0) {
+            currentVideoData.genres = ["Indefinido"];
+        }
+
+      } else if (currentVideoData.title && !line.startsWith("#")) {
+        // Esta línea es la URL, y ya tenemos un título para asociarla
+        currentVideoData.url = line;
+        if (currentVideoData.title && currentVideoData.url) {
+          videosToAdd.push({ ...currentVideoData }); // Copiar el objeto
+        }
+        currentVideoData = {}; // Reset para el siguiente VOD
+      }
+    }
+
+    if (videosToAdd.length === 0) {
+      return res.status(400).json({ message: `No se encontraron VODs válidos (título/URL) en el archivo. Items parseados: ${itemsFoundInFile}` });
+    }
+
+    let vodsAddedCount = 0;
+    let vodsSkippedCount = 0;
+    const errors = [];
+
+    for (const vodData of videosToAdd) {
+      try {
+        const existingVideo = await Video.findOne({ url: vodData.url });
+        if (!existingVideo) {
+          // Aquí podrías añadir lógica para obtener thumbnail de TMDB si no se provee logo
+          // if (!vodData.logo && vodData.title) {
+          //   vodData.logo = await getTMDBThumbnail(vodData.title, vodData.releaseYear);
+          // }
+          const newVideo = new Video(vodData);
+          await newVideo.save();
+          vodsAddedCount++;
+        } else {
+          console.log(`CTRL: createBatchVideosFromTextAdmin - VOD ya existente (misma URL): ${vodData.url}, omitiendo.`);
+          vodsSkippedCount++;
+        }
+      } catch (saveError) {
+        console.error(`CTRL: createBatchVideosFromTextAdmin - Error guardando VOD ${vodData.title}: ${saveError.message}`);
+        errors.push(`Error con '${vodData.title}': ${saveError.message}`);
+      }
+    }
+    
+    const summaryMessage = `Proceso completado. VODs encontrados en archivo: ${itemsFoundInFile}. Nuevos añadidos: ${vodsAddedCount}. Omitidos (duplicados por URL): ${vodsSkippedCount}.`;
+    console.log(`CTRL: createBatchVideosFromTextAdmin - ${summaryMessage}`);
+    
+    if (errors.length > 0) {
+        return res.status(207).json({ // 207 Multi-Status si hubo algunos errores
+            message: `${summaryMessage} Se encontraron algunos errores.`, 
+            added: vodsAddedCount,
+            skipped: vodsSkippedCount,
+            errors: errors 
+        });
+    }
+
+    res.json({ message: summaryMessage, added: vodsAddedCount, skipped: vodsSkippedCount });
+
   } catch (error) {
-    console.error("Error al obtener video:", error);
-    res.status(500).json({ error: "Error al obtener video" });
-  }
-};
-
-export const createVideo = async (req, res) => {
-  try {
-    const {
-      titulo,
-      descripcion,
-      url,
-      thumbnail,
-      tipo,
-      customThumbnail
-    } = req.body;
-
-    if (!titulo || !url) {
-      return res.status(400).json({ error: "Título y URL son obligatorios" });
-    }
-
-    let playableUrl = url;
-
-    if (url.includes("dropbox.com/s/") && !url.includes("dl.dropboxusercontent.com")) {
-      playableUrl = url.replace("www.dropbox.com/s/", "dl.dropboxusercontent.com/s/");
-    }
-
-    if (playableUrl.includes("dropbox") && !playableUrl.includes("raw=1")) {
-      playableUrl = playableUrl.includes("?")
-        ? playableUrl + "&raw=1"
-        : playableUrl + "?raw=1";
-    }
-
-    let finalThumbnail = thumbnail;
-if (!thumbnail) {
-  finalThumbnail = await getTMDBThumbnail(titulo);
-}
-
-const newVideo = new Video({
-  titulo,
-  descripcion: descripcion || "",
-  url: playableUrl,
-  thumbnail: finalThumbnail || "https://via.placeholder.com/300x170?text=Video",
-  tipo: tipo || "movie",
-  usuario: req.user?.id,
-});
-
-    const savedVideo = await newVideo.save();
-    res.status(201).json({ video: savedVideo });
-  } catch (error) {
-    console.error("Error al crear video:", error);
-    res.status(500).json({ error: "Error al crear video" });
-  }
-};
-
-export const deleteVideo = async (req, res) => {
-  try {
-    const video = await Video.findByIdAndDelete(req.params.id);
-    if (!video) {
-      return res.status(404).json({ error: "Video no encontrado" });
-    }
-    res.json({ message: "Video eliminado correctamente" });
-  } catch (error) {
-    console.error("Error al eliminar video:", error);
-    res.status(500).json({ error: "Error al eliminar video" });
+    console.error("Error en CTRL:createBatchVideosFromTextAdmin:", error.message, error.stack);
+    next(error);
   }
 };

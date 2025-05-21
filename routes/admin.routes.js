@@ -1,28 +1,35 @@
+// iptv-backend/routes/admin.routes.js
 import express from "express";
-import User from "../models/User.js";
-import { verifyToken } from "../middlewares/verifyToken.js";
+import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
+
+// Importa las funciones del controlador de admin
+// Asegúrate de que la ruta a admin.controller.js sea correcta
+// y que admin.controller.js exporte estas funciones.
+import {
+  getAllUsersAdmin,
+  updateUserPlanAdmin,
+  updateUserStatusAdmin
+  // Si tienes otras funciones de admin (ej. para dashboard, settings), impórtalas aquí
+  // getDashboardStats,
+  // updateGlobalSettings,
+} from "../controllers/admin.controller.js";
 
 const router = express.Router();
 
-// Obtener usuarios pendientes
-router.get("/pending-users", verifyToken, async (req, res) => {
-  const pendingUsers = await User.find({ isActive: false });
-  res.json(pendingUsers);
-});
+// --- RUTAS PARA LA GESTIÓN DE USUARIOS (SOLO ADMIN) ---
 
-// Aprobar usuario
-router.post("/approve-user/:id", verifyToken, async (req, res) => {
-  const { id } = req.params;
-  const { expiresAt } = req.body; // Fecha de expiración que define el admin
+// GET /api/admin/users - Obtener todos los usuarios para el panel de admin
+router.get("/users", verifyToken, isAdmin, getAllUsersAdmin);
 
-  const user = await User.findById(id);
-  if (!user) return res.status(404).json({ error: "Usuario no encontrado" });
+// PUT /api/admin/users/:userId/plan - Actualizar el plan de un usuario específico
+router.put("/users/:userId/plan", verifyToken, isAdmin, updateUserPlanAdmin);
 
-  user.isActive = true;
-  user.expiresAt = expiresAt ? new Date(expiresAt) : null;
-  await user.save();
+// PUT /api/admin/users/:userId/status - Activar/desactivar un usuario específico
+router.put("/users/:userId/status", verifyToken, isAdmin, updateUserStatusAdmin);
 
-  res.json({ message: "Usuario aprobado exitosamente." });
-});
+
+// --- OTRAS RUTAS DE ADMINISTRACIÓN QUE PUEDAS TENER ---
+// router.get("/dashboard-stats", verifyToken, isAdmin, getDashboardStats);
+// router.post("/settings", verifyToken, isAdmin, updateGlobalSettings);
 
 export default router;
