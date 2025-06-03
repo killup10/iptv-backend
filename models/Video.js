@@ -4,11 +4,45 @@ import mongoose from "mongoose";
 const videoSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: "", trim: true },
-  url: { type: String, required: true, trim: true },
+  url: { 
+    type: String, 
+    required: function() { return this.tipo === "pelicula"; },
+    trim: true,
+    default: ""
+  },
   tipo: {
     type: String,
     required: true,
-    enum: ["pelicula", "serie"]
+    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"]
+  },
+  subtipo: {
+    type: String,
+    required: function() { return this.tipo !== "pelicula"; },
+    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"],
+    default: function() { return this.tipo || "serie"; }
+  },
+  subcategoria: {
+    type: String,
+    required: function() { return this.tipo === "serie"; },
+    enum: ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas"],
+    default: "Netflix"
+  },
+  watchProgress: {
+    lastChapter: { type: Number, default: 0 },
+    lastTime: { type: Number, default: 0 },
+    lastWatched: { type: Date },
+    completed: { type: Boolean, default: false }
+  },
+  chapters: {
+    type: [{
+      title: { type: String, required: true, trim: true },
+      url: { type: String, required: true, trim: true },
+      thumbnail: { type: String, default: '' },
+      duration: { type: String, default: '0:00' },
+      description: { type: String, default: '', trim: true }
+    }],
+    required: function() { return this.tipo !== "pelicula"; },
+    default: []
   },
   mainSection: {
     type: String,

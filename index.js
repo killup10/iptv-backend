@@ -1,10 +1,10 @@
-// iptv-backend/index.js
 import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
 import fetch from "node-fetch";
 
+// Rutas
 import m3uRoutes from "./routes/m3u.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -15,37 +15,26 @@ import channelsRoutes from "./routes/channels.routes.js";
 dotenv.config();
 const app = express();
 
-// --- Middlewares ---
+// --- CORS ---
 const allowedOrigins = [
   "https://iptv-frontend-iota.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
-  "https://play.teamg.store" // Asegúrate de que no haya espacios extra aquí
+  "https://play.teamg.store"
 ];
-console.log("Orígenes permitidos para CORS:", allowedOrigins); // Log para verificar
+console.log("Orígenes permitidos para CORS:", allowedOrigins);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Si 'origin' es undefined (peticiones del mismo origen o herramientas como Postman), permitir.
-    if (!origin) {
-      console.log("CORS: Petición sin origen permitida.");
-      return callback(null, true);
-    }
-
-    // Limpiar el origen recibido para evitar problemas con espacios
+    if (!origin) return callback(null, true); // Para Electron o Postman
     const trimmedOrigin = origin.trim();
-
     if (allowedOrigins.includes(trimmedOrigin)) {
       console.log(`CORS: Origen permitido: ${trimmedOrigin}`);
-      callback(null, true);
+      return callback(null, true);
     } else {
-      console.warn(`CORS: Origen NO PERMITIDO: '${trimmedOrigin}'. Orígenes permitidos: [${allowedOrigins.join(', ')}]`);
-      // Devolver un error específico de CORS para que el navegador lo maneje
-      // en lugar de un error genérico que podría ser malinterpretado.
-      // El paquete 'cors' usualmente devuelve las cabeceras correctas para un error de CORS
-      // cuando la función origin llama a callback con un error.
-      callback(new Error(`El origen '${trimmedOrigin}' no está permitido por la política CORS.`));
+      console.warn(`CORS: Origen NO PERMITIDO: '${trimmedOrigin}'`);
+      return callback(new Error(`El origen '${trimmedOrigin}' no está permitido por CORS.`));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -55,77 +44,94 @@ app.use(cors({
 
 app.use(express.json());
 
-// --- Proxy HLS/M3U8 ---
-app.get("/proxy", async (req, res) => {
-  const { url: encodedUrl } = req.query;
-  if (!encodedUrl) return res.status(400).send("Falta el parámetro 'url'.");
-  let decodedUrl;
+// --- Proxy de imagenes ---
+app.get("/img-proxy", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send("Falta el parámetro 'url'.");
+
   try {
-    decodedUrl = decodeURIComponent(encodedUrl);
-  } catch (e) {
-    console.error("Proxy: Error al decodificar URL:", e.message, "URL recibida:", encodedUrl);
-    return res.status(400).send("URL mal formada.");
-  }
-  if (!decodedUrl.startsWith('http://') && !decodedUrl.startsWith('https://')) {
-    return res.status(400).send("Proxy solo procesa URLs absolutas.");
-  }
-  console.log(`Proxy: Accediendo a: ${decodedUrl}`);
-  try {
-    const targetResponse = await fetch(decodedUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36' },
-      timeout: 20000
+    const decodedUrl = decodeURIComponent(url);
+    if (!decodedUrl.startsWith("http")) return res.status(400).send("URL inválida.");
+
+    const response = await fetch(decodedUrl, {
+      headers: {
+        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0"
+      },
+      timeout: 10000
     });
-    if (!targetResponse.ok) {
-      const errorBody = await targetResponse.text().catch(() => "No se pudo leer cuerpo del error.");
-      console.error(`Proxy: Error desde destino (${decodedUrl}): ${targetResponse.status} ${targetResponse.statusText}. Cuerpo: ${errorBody}`);
-      return res.status(targetResponse.status).send(`Error desde destino: ${targetResponse.statusText}`);
+
+    if (!response.ok) {
+      console.warn(`Proxy imagen falló: ${decodedUrl} - ${response.status}`);
+      return res.status(response.status).send("Error al obtener la imagen.");
     }
-    res.set({ 
-        "Content-Type": targetResponse.headers.get("content-type") || "application/octet-stream",
-    });
-    targetResponse.body.pipe(res);
+
+    res.set("Content-Type", response.headers.get("content-type") || "image/jpeg");
+    response.body.pipe(res);
   } catch (err) {
-    console.error(`Proxy: Fetch error a ${decodedUrl}:`, err.message);
-    if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') return res.status(504).send(`Proxy: No se pudo alcanzar destino.`);
-    if (err.name === 'FetchError' && (err.type === 'request-timeout' || err.message.includes('timeout'))) return res.status(504).send(`Proxy: Timeout conectando a destino.`);
-    res.status(500).send("Proxy: Error interno.");
+    console.error("Error en /img-proxy:", err.message);
+    res.status(500).send("Error interno del proxy de imagen.");
   }
 });
 
-// --- Rutas API ---
+// --- Proxy de HLS/M3U8 ---
+app.get("/proxy", async (req, res) => {
+  const { url: encodedUrl } = req.query;
+  if (!encodedUrl) return res.status(400).send("Falta el parámetro 'url'.");
+
+  try {
+    const decodedUrl = decodeURIComponent(encodedUrl);
+    if (!decodedUrl.startsWith("http")) return res.status(400).send("URL inválida.");
+
+    const response = await fetch(decodedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 20000
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "No se pudo leer cuerpo del error.");
+      console.error(`Proxy HLS error: ${response.status} - ${errorBody}`);
+      return res.status(response.status).send("Error desde destino.");
+    }
+
+    res.set("Content-Type", response.headers.get("content-type") || "application/octet-stream");
+    response.body.pipe(res);
+  } catch (err) {
+    console.error(`Error en /proxy:`, err.message);
+    res.status(500).send("Error interno.");
+  }
+});
+
+// --- Rutas principales ---
 app.get("/", (_req, res) => {
   res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀");
 });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/videos", videosRoutes); 
+app.use("/api/videos", videosRoutes);
 app.use("/api/m3u", m3uRoutes);
 app.use("/api/admin-content", adminContentRoutes);
-app.use("/api/channels", channelsRoutes); 
+app.use("/api/channels", channelsRoutes);
 
-// --- Conexión MongoDB y Arranque ---
-const PORT = process.env.PORT || 5000;
+// --- MongoDB ---
+const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB conectado");
-    app.listen(PORT, () => console.log(`🚀 Servidor en puerto ${PORT}`));
+    app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
   })
   .catch(err => {
-    console.error("❌ Error crítico al conectar a MongoDB o iniciar servidor:", err);
+    console.error("❌ Error crítico con MongoDB:", err);
     process.exit(1);
   });
 
-// Manejador de errores global
+// --- Manejador de errores global ---
 app.use((err, req, res, next) => {
-  console.error("--- MANEJADOR DE ERRORES GLOBAL ---");
+  console.error("--- ERROR GLOBAL ---");
   console.error("Path:", req.path);
   console.error("Error:", err.message);
-  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) { // Muestra stack en desarrollo o si NODE_ENV no está definido
+  if (!process.env.NODE_ENV || process.env.NODE_ENV === "development") {
     console.error("Stack:", err.stack);
   }
-  console.error("---------------------------------");
-  res.status(err.status || 500).json({
-    error: err.message || 'Algo salió muy mal en el servidor!'
-  });
+  res.status(err.status || 500).json({ error: err.message || "Error interno." });
 });
