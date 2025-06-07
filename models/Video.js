@@ -1,6 +1,15 @@
 // iptv-backend/models/Video.js
 import mongoose from "mongoose";
 
+// Se crea un sub-schema para las entradas de progreso individuales
+const watchProgressEntrySchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  lastChapter: { type: Number, default: 0 },
+  lastTime: { type: Number, default: 0 },
+  lastWatched: { type: Date, default: Date.now },
+  completed: { type: Boolean, default: false }
+}, {_id: false}); // _id: false es una buena práctica para subdocumentos si no necesitas IDs únicos para cada entrada de progreso
+
 const videoSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: "", trim: true },
@@ -27,11 +36,11 @@ const videoSchema = new mongoose.Schema({
     enum: ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas"],
     default: "Netflix"
   },
+  // --- CAMBIO CLAVE ---
+  // watchProgress ahora es un array que usa el sub-schema definido arriba.
   watchProgress: {
-    lastChapter: { type: Number, default: 0 },
-    lastTime: { type: Number, default: 0 },
-    lastWatched: { type: Date },
-    completed: { type: Boolean, default: false }
+    type: [watchProgressEntrySchema],
+    default: [] 
   },
   chapters: {
     type: [{
@@ -56,14 +65,14 @@ const videoSchema = new mongoose.Schema({
     ],
     default: "POR_GENERO",
   },
-  genres: [{ // Array de géneros
+  genres: [{ 
     type: String,
     trim: true,
   }],
-  requiresPlan: [{ // Array de Strings para planes
+  requiresPlan: [{ 
     type: String,
     trim: true,
-    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"], // Tus 5 planes
+    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"], 
   }],
   releaseYear: { type: Number },
   isFeatured: { type: Boolean, default: false },
@@ -74,41 +83,27 @@ const videoSchema = new mongoose.Schema({
   tmdbThumbnail: { type: String, default: '' },
   
   trailerUrl: { type: String, default: '', trim: true },
-  // user: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Descomenta si lo necesitas
 }, { 
   timestamps: true
 });
 
 // --- ÍNDICES ---
-
-// 1. Índice de texto para búsquedas
 videoSchema.index({ title: 'text', description: 'text' });
-
-// 2. Índices individuales para campos de array (MongoDB crea índices multikey)
 videoSchema.index({ genres: 1 });
 videoSchema.index({ requiresPlan: 1 });
-
-// 3. Índices individuales para campos de filtro comunes (si no están en compuestos)
 videoSchema.index({ mainSection: 1 });
 videoSchema.index({ active: 1 });
 videoSchema.index({ isFeatured: 1 });
 videoSchema.index({ tipo: 1 });
 
+// Este nuevo índice es CRUCIAL para que las búsquedas de "Continuar Viendo" sean rápidas.
+// Ayuda a encontrar videos donde un usuario específico tiene progreso.
+videoSchema.index({ "watchProgress.userId": 1, "watchProgress.lastWatched": -1 });
 
-// 4. Índices compuestos (con UN MÁXIMO de UN campo de array por índice)
-// Para filtrar VODs por tipo, estado de activación y si son destacados (Home y listados)
+// Índices compuestos
 videoSchema.index({ tipo: 1, active: 1, isFeatured: 1 });
-
-// Para filtrar por sección principal, tipo y estado de activación
 videoSchema.index({ mainSection: 1, tipo: 1, active: 1 });
-
-// Si necesitas filtrar por 'requiresPlan' junto con 'active' y 'tipo':
-videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 }); // Válido (tipo y active son escalares)
-
-// Si necesitas filtrar por 'requiresPlan' junto con 'active' y 'mainSection':
-videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 }); // Válido
-
-// EL ÍNDICE PROBLEMÁTICO QUE DEBE SER ELIMINADO (si aún existe en alguna versión):
-// videoSchema.index({ genres: 1, active: 1, requiresPlan: 1 }); // <-- ASEGÚRATE QUE ESTO NO ESTÉ ACTIVO
+videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 }); 
+videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 }); 
 
 export default mongoose.model("Video", videoSchema);

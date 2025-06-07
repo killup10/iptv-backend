@@ -69,37 +69,117 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ error: "Credenciales inválidas." });
     }
 
-    const isAdminUser = user.role === 'admin';
-    if (!isAdminUser && user.deviceId && user.deviceId !== deviceId && deviceId) {
-      return res.status(403).json({ 
-        error: "Esta cuenta ya está activa en otro dispositivo. Cierra la sesión anterior para continuar." 
-      });
-    }
-    if (!isAdminUser && deviceId && (!user.deviceId || user.deviceId !== deviceId)) {
-      user.deviceId = deviceId;
-      await user.save(); 
-      console.log(`LOGIN CONTROLLER (Backend): DeviceId actualizado para ${user.username} a ${deviceId}`);
-    }
-
+    // Generar token antes de verificar sesiones
     const payload = { 
         id: user._id, 
         role: user.role,
         username: user.username,
-        plan: user.plan // El plan 'estandar' se incluirá aquí si está asignado al usuario
+        plan: user.plan,
+        deviceId: deviceId || 'unknown'
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    const isAdminUser = user.role === 'admin';
+    
+    // Solo aplicar restricción de sesiones para usuarios no admin
+    if (!isAdminUser && deviceId) {
+      // Inicializar activeSessions si no existe
+      if (!user.activeSessions) {
+        user.activeSessions = [];
+      }
+
+      // Limpiar sesiones expiradas (tokens que ya no son válidos) y sesiones inactivas > 7 días
+      const validSessions = [];
+      const now = new Date();
+      const maxInactivityMs = 7 * 24 * 60 * 60 * 1000; // 7 días en ms
+      for (const session of user.activeSessions) {
+        try {
+          jwt.verify(session.token, process.env.JWT_SECRET);
+          // Verificar inactividad
+          if (session.lastActivity && (now - new Date(session.lastActivity)) > maxInactivityMs) {
+            console.log(`LOGIN CONTROLLER: Removiendo sesión inactiva > 7 días para ${user.username}`);
+            continue; // No incluir esta sesión
+          }
+          validSessions.push(session);
+        } catch (err) {
+          // Token expirado o inválido, no lo incluimos
+          console.log(`LOGIN CONTROLLER: Removiendo sesión expirada para ${user.username}`);
+        }
+      }
+      user.activeSessions = validSessions;
+
+      // Verificar si ya existe una sesión para este dispositivo
+      const existingSessionIndex = user.activeSessions.findIndex(session => session.deviceId === deviceId);
+      
+      if (existingSessionIndex !== -1) {
+        // Actualizar token para el dispositivo existente
+        user.activeSessions[existingSessionIndex].token = token;
+        user.activeSessions[existingSessionIndex].lastActivity = new Date();
+      } else {
+        // Verificar límite de sesiones simultáneas (máximo 2)
+        if (user.activeSessions.length >= 2) {
+          return res.status(403).json({ 
+            error: "Límite de dispositivos alcanzado. Solo puedes estar conectado en 2 dispositivos simultáneamente. Cierra sesión en otro dispositivo para continuar." 
+          });
+        }
+        
+        // Agregar nueva sesión
+        user.activeSessions.push({
+          deviceId: deviceId,
+          token: token,
+          lastActivity: new Date()
+        });
+      }
+
+      await user.save();
+      console.log(`LOGIN CONTROLLER (Backend): Sesiones activas para ${user.username}: ${user.activeSessions.length}`);
+    }
     
     res.json({ 
         token, 
         user: { 
             username: user.username, 
             role: user.role,
-            plan: user.plan 
+            plan: user.plan,
+            activeSessions: user.activeSessions?.length || 0
         }
     });
 
   } catch (error) {
     console.error("Error en el controlador de login (Backend):", error);
+    next(error);
+  }
+};
+
+// Nuevo endpoint para cerrar sesión en un dispositivo específico
+export const logout = async (req, res, next) => {
+  try {
+    const { deviceId } = req.body;
+    const userId = req.user.id; // Obtenido del middleware de autenticación
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    // Si no se proporciona deviceId, cerrar todas las sesiones
+    if (!deviceId) {
+      user.activeSessions = [];
+      await user.save();
+      return res.json({ message: "Todas las sesiones han sido cerradas" });
+    }
+
+    // Filtrar la sesión del dispositivo específico
+    user.activeSessions = user.activeSessions.filter(session => session.deviceId !== deviceId);
+    await user.save();
+
+    res.json({ 
+      message: "Sesión cerrada exitosamente",
+      activeSessions: user.activeSessions.length
+    });
+
+  } catch (error) {
+    console.error("Error en el controlador de logout:", error);
     next(error);
   }
 };

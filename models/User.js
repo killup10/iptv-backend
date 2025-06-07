@@ -15,7 +15,11 @@ const userSchema = new mongoose.Schema({
   },
   isActive: { type: Boolean, default: false },
   expiresAt: { type: Date, default: null },
-  deviceId: { type: String, default: null },
+  activeSessions: [{
+    deviceId: { type: String, required: true },
+    token: { type: String, required: true },
+    lastActivity: { type: Date, default: Date.now }
+  }],
   role: { type: String, enum: ["admin", "user"], default: "user" },
   plan: {
     type: String,
