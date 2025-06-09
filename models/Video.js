@@ -30,12 +30,15 @@ const videoSchema = new mongoose.Schema({
     enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"],
     default: function() { return this.tipo || "serie"; }
   },
-  subcategoria: {
-    type: String,
-    required: function() { return this.tipo === "serie"; },
-    enum: ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas"],
-    default: "Netflix"
-  },
+ subcategoria: {
+  type: String,
+  required: function() { return this.tipo === "serie"; },
+  enum: [
+    "Netflix", "Prime Video", "Disney", "Apple TV",
+    "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
+  ],
+  default: "Netflix"
+},
   // --- CAMBIO CLAVE ---
   // watchProgress ahora es un array que usa el sub-schema definido arriba.
   watchProgress: {

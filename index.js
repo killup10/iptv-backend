@@ -1,19 +1,17 @@
-import express from "express";
-import mongoose from "mongoose";
 import dotenv from "dotenv";
-import cors from "cors";
+import mongoose from "mongoose";
 import fetch from "node-fetch";
-
-// Rutas
-import m3uRoutes from "./routes/m3u.routes.js";
-import videosRoutes from "./routes/videos.routes.js";
+import express from "express";
+import cors from "cors";
+import app from "./app.js";
 import authRoutes from "./routes/auth.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import videosRoutes from "./routes/videos.routes.js";
+import m3uRoutes from "./routes/m3u.routes.js";
 import adminContentRoutes from "./routes/adminContent.routes.js";
 import channelsRoutes from "./routes/channels.routes.js";
 
 dotenv.config();
-const app = express();
 
 // --- CORS ---
 const allowedOrigins = [

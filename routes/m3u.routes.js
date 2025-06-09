@@ -1,17 +1,18 @@
 // routes/m3u.routes.js
 import express from "express";
-import { uploadM3U, listM3U, getM3UContent } from "../controllers/m3u.controller.js";
+import multer from "multer";
+import { uploadM3U } from "../controllers/m3u.controller.js";
 import { verifyToken } from "../middlewares/verifyToken.js";
 
 const router = express.Router();
 
-// Subir un archivo M3U
-router.post("/upload", verifyToken, uploadM3U);
+// Configurar multer para manejar archivos
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB límite
+});
 
-// Listar archivos M3U
-router.get("/list", verifyToken, listM3U);
-
-// Ver contenido de un archivo M3U
-router.get("/view/:fileName", verifyToken, getM3UContent);
+// Subir un archivo M3U (masivo)
+router.post("/bulk-upload", verifyToken, upload.single('file'), uploadM3U);
 
 export default router;
