@@ -220,10 +220,18 @@ router.get("/", verifyToken, async (req, res, next) => {
     if (req.query.tipo) query.tipo = req.query.tipo;
     if (req.query.search) query.$text = { $search: req.query.search };
     
+    // --- INICIO DE LA CORRECCIÓN CLAVE ---
+    
+    // 1. Contar el total de documentos que coinciden con la consulta (antes de aplicar limit/skip)
+    const total = await Video.countDocuments(query);
+    
+    // 2. Obtener los documentos de la página actual
     const videos = await Video.find(query)
-                              .sort(req.query.sort || { createdAt: -1 })
-                              .limit(parseInt(req.query.limit) || 50)
-                              .skip(parseInt(req.query.skip) || 0);
+                                .sort(req.query.sort || { createdAt: -1 })
+                                .limit(parseInt(req.query.limit) || 50)
+                                .skip(parseInt(req.query.skip) || 0);
+    
+    // --- FIN DE LA CORRECCIÓN CLAVE ---
     
     const mapToUserFormat = (v) => ({ 
       id: v._id, _id: v._id, name: v.title, title: v.title, 
@@ -247,12 +255,17 @@ router.get("/", verifyToken, async (req, res, next) => {
       user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
     });
 
-    res.json(isAdminView ? videos.map(mapToFullAdminFormat) : videos.map(mapToUserFormat));
+    const formattedVideos = isAdminView ? videos.map(mapToFullAdminFormat) : videos.map(mapToUserFormat);
+
+    // 3. Devolver un objeto con los videos de la página y el conteo total
+    res.json({ videos: formattedVideos, total: total });
+
   } catch (error) { 
     console.error("Error en BACKEND GET /api/videos:", error);
     next(error); 
   }
 });
+
 
 // POST /api/videos (Crear un VOD - usado por AdminPanel)
 router.post("/", verifyToken, isAdmin, async (req, res, next) => {

@@ -38,6 +38,7 @@ export const getContinueWatching = async (req, res, next) => {
     }
 
     // 4. Ejecutar la consulta en la base de datos
+    console.log('QUERY BACKEND:', query);
     const videos = await Video.find(query)
       // No podemos ordenar por el campo del array aquí, lo haremos después
       .limit(20) // Obtenemos un poco más para ordenar y luego limitar
