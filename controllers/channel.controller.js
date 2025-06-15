@@ -4,6 +4,21 @@ import mongoose from "mongoose";
 import readline from 'readline';
 import { Readable } from 'stream';
 
+/**
+ * Lista estática de planes permitidos para los canales. Se utiliza en las
+ * validaciones de creación/edición para evitar discrepancias si el modelo se
+ * carga con un esquema antiguo.
+ */
+const VALID_CHANNEL_PLANS = [
+  'gplay',
+  'estandar',
+  'cinefilo',
+  'sports',
+  'premium',
+  'free_preview',
+  'basico'
+];
+
 // Para la ruta GET /api/channels/list
 export const getPublicChannels = async (req, res, next) => {
   console.log("CTRL: getPublicChannels - Query:", JSON.stringify(req.query));
@@ -12,7 +27,7 @@ export const getPublicChannels = async (req, res, next) => {
 
     if (req.query.featured === "true") {
       queryConditions.isFeatured = true;
-      queryConditions.isPubliclyVisible = true; 
+      queryConditions.isPubliclyVisible = true;
     } else {
       queryConditions.isPubliclyVisible = true;
       if (req.query.section && req.query.section.toLowerCase() !== 'todos') {
@@ -22,7 +37,7 @@ export const getPublicChannels = async (req, res, next) => {
 
     const channels = await Channel.find(queryConditions).sort({ name: 1 });
     console.log(`CTRL: getPublicChannels - Canales encontrados para query ${JSON.stringify(queryConditions)}: ${channels.length}`);
-    
+
     const data = channels.map((c) => ({
       id: c._id,
       name: c.name,
@@ -45,14 +60,14 @@ export const getPublicChannels = async (req, res, next) => {
 export const getChannelFilterSections = async (req, res, next) => {
   console.log("CTRL: getChannelFilterSections - Solicitud.");
   try {
-    const distinctSections = await Channel.distinct("section", { 
-      active: true, 
-      isPubliclyVisible: true 
+    const distinctSections = await Channel.distinct("section", {
+      active: true,
+      isPubliclyVisible: true
     });
     const validSections = distinctSections
       .filter(s => s && typeof s === 'string' && s.trim() !== '')
-      .sort((a,b) => a.localeCompare(b));
-    
+      .sort((a, b) => a.localeCompare(b));
+
     console.log(`CTRL: getChannelFilterSections - Secciones encontradas: ${validSections.length}`, validSections);
     res.json(["Todos", ...validSections]);
   } catch (error) {
@@ -64,8 +79,7 @@ export const getChannelFilterSections = async (req, res, next) => {
 // Para la ruta GET /api/channels/id/:id (reproducción y verificación de plan)
 export const getChannelByIdForUser = async (req, res, next) => {
   const channelId = req.params.id;
-  // El plan del usuario vendrá del token (ej. 'basico', 'premium', etc.)
-  // Los planes en Channel.requiresPlan son ['gplay', 'estandar', 'sports', 'cinefilo', 'premium']
+  // El plan del usuario vendrá del token (ej. 'gplay', 'premium', etc.)
   const userPlanFromToken = req.user?.plan || 'gplay'; // Si no hay plan en token, asume el más básico ('gplay')
   const userRole = req.user?.role;
 
@@ -87,15 +101,15 @@ export const getChannelByIdForUser = async (req, res, next) => {
 
     let canAccess = false;
     // Definir la jerarquía de planes usando las MISMAS CLAVES que en tu modelo y AdminPanel
-    const planHierarchy = { 
-      'gplay': 1, 
-      'estandar': 2, 
-      'sports': 3, 
-      'cinefilo': 4, // Ajusta los niveles si cinefilo y premium son diferentes
-      'premium': 5 
+    const planHierarchy = {
+      'gplay': 1,
+      'estandar': 2,
+      'sports': 3,
+      'cinefilo': 4,
+      'premium': 5
     };
-    
-    // Normalizar el plan del usuario si en el token viene como "basico" pero en la DB es "gplay"
+
+    // Normalizar el plan en caso de que aún exista el valor antiguo 'basico'
     const normalizedUserPlanKey = userPlanFromToken === 'basico' ? 'gplay' : userPlanFromToken;
     const userLevel = planHierarchy[normalizedUserPlanKey] || 0; // Nivel del plan del usuario
 
@@ -111,12 +125,12 @@ export const getChannelByIdForUser = async (req, res, next) => {
       // El canal tiene planes requeridos. El usuario necesita tener un plan cuyo nivel sea IGUAL O SUPERIOR
       // a CUALQUIERA de los planes requeridos por el canal.
       canAccess = channel.requiresPlan.some(reqPlanKey => {
-          const requiredLevel = planHierarchy[reqPlanKey];
-          if (requiredLevel === undefined) { // Plan desconocido en el canal, tratar como muy restrictivo o loguear error
-              console.warn(`CTRL: getChannelByIdForUser - Plan desconocido '${reqPlanKey}' en los requisitos del canal ${channel.name}`);
-              return false; 
-          }
-          return userLevel >= requiredLevel;
+        const requiredLevel = planHierarchy[reqPlanKey];
+        if (requiredLevel === undefined) { // Plan desconocido en el canal, tratar como muy restrictivo o loguear error
+          console.warn(`CTRL: getChannelByIdForUser - Plan desconocido '${reqPlanKey}' en los requisitos del canal ${channel.name}`);
+          return false;
+        }
+        return userLevel >= requiredLevel;
       });
     }
 
@@ -126,7 +140,7 @@ export const getChannelByIdForUser = async (req, res, next) => {
         error: `Acceso denegado. Tu plan actual no permite acceder a este canal.`
       });
     }
-    
+
     console.log(`CTRL: getChannelByIdForUser - Acceso PERMITIDO para ${req.user?.username} al canal ${channel.name}`);
     res.json({
       id: channel._id, name: channel.name, url: channel.url, logo: channel.logo,
@@ -147,10 +161,10 @@ export const getAllChannelsAdmin = async (req, res, next) => {
     const channels = await Channel.find({}).sort({ createdAt: -1 });
     console.log(`CTRL: getAllChannelsAdmin - Canales encontrados: ${channels.length}`);
     res.json(channels.map(c => ({
-        id: c._id, _id: c._id, name: c.name, url: c.url, logo: c.logo,
-        description: c.description, section: c.section, active: c.active,
-        isFeatured: c.isFeatured, requiresPlan: c.requiresPlan,
-        isPubliclyVisible: c.isPubliclyVisible, createdAt: c.createdAt, updatedAt: c.updatedAt
+      id: c._id, _id: c._id, name: c.name, url: c.url, logo: c.logo,
+      description: c.description, section: c.section, active: c.active,
+      isFeatured: c.isFeatured, requiresPlan: c.requiresPlan,
+      isPubliclyVisible: c.isPubliclyVisible, createdAt: c.createdAt, updatedAt: c.updatedAt
     })));
   } catch (error) {
     console.error("Error en CTRL:getAllChannelsAdmin:", error.message);
@@ -166,16 +180,11 @@ export const createChannelAdmin = async (req, res, next) => {
       return res.status(400).json({ error: "Nombre y URL del canal son obligatorios." });
     }
     if (requiresPlan && Array.isArray(requiresPlan)) {
-        const validEnumPlans = Channel.schema.path('requiresPlan').caster?.enumValues;
-        if (validEnumPlans) {
-            for (const plan of requiresPlan) {
-                if (plan && !validEnumPlans.includes(plan)) {
-                    return res.status(400).json({ error: `Plan inválido en la lista: '${plan}'. Válidos: ${validEnumPlans.join(', ')}` });
-                }
-            }
-        } else {
-            console.warn("CTRL: createChannelAdmin - No se pudieron obtener los enumValues para requiresPlan del modelo Channel.");
+      for (const plan of requiresPlan) {
+        if (plan && !VALID_CHANNEL_PLANS.includes(plan)) {
+          return res.status(400).json({ error: `Plan inválido en la lista: '${plan}'. Válidos: ${VALID_CHANNEL_PLANS.join(', ')}` });
         }
+      }
     }
     const newChannel = new Channel({
       name, url, logo, description, section: section || "General",
@@ -191,7 +200,7 @@ export const createChannelAdmin = async (req, res, next) => {
   } catch (error) {
     console.error("Error en CTRL:createChannelAdmin:", error.message, error.stack);
     if (error.name === 'ValidationError') {
-        return res.status(400).json({ error: error.message });
+      return res.status(400).json({ error: error.message });
     }
     next(error);
   }
@@ -205,20 +214,18 @@ export const updateChannelAdmin = async (req, res, next) => {
       return res.status(400).json({ error: "ID de canal inválido." });
     }
     const { name, url, logo, description, section, active, isFeatured, requiresPlan, isPubliclyVisible } = req.body;
+    
     if (requiresPlan && Array.isArray(requiresPlan)) {
-        const validEnumPlans = Channel.schema.path('requiresPlan').caster?.enumValues;
-        if (validEnumPlans) {
-            for (const plan of requiresPlan) {
-                if (plan && !validEnumPlans.includes(plan)) {
-                    return res.status(400).json({ error: `Plan inválido en la lista: '${plan}'. Válidos: ${validEnumPlans.join(', ')}` });
-                }
-            }
-        } else {
-             console.warn("CTRL: updateChannelAdmin - No se pudieron obtener los enumValues para requiresPlan del modelo Channel.");
+      for (const plan of requiresPlan) {
+        if (plan && !VALID_CHANNEL_PLANS.includes(plan)) {
+          return res.status(400).json({ error: `Plan inválido en la lista: '${plan}'. Válidos: ${VALID_CHANNEL_PLANS.join(', ')}` });
         }
+      }
     }
+
     const updateData = { name, url, logo, description, section, active, isFeatured, requiresPlan: requiresPlan || [], isPubliclyVisible };
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
     const updatedChannel = await Channel.findByIdAndUpdate(channelId, updateData, { new: true });
     if (!updatedChannel) {
       return res.status(404).json({ error: "Canal no encontrado para actualizar." });
@@ -227,8 +234,8 @@ export const updateChannelAdmin = async (req, res, next) => {
     res.json(updatedChannel);
   } catch (error) {
     console.error(`Error en CTRL:updateChannelAdmin para ID ${channelId}:`, error.message);
-     if (error.name === 'ValidationError') {
-        return res.status(400).json({ error: error.message });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: error.message });
     }
     next(error);
   }
@@ -264,7 +271,7 @@ export const processM3UAdmin = async (req, res, next) => {
     let channelsToAdd = [];
     let currentChannel = {};
     if (!lines[0].startsWith('#EXTM3U')) {
-        return res.status(400).json({ error: 'Archivo M3U inválido: Falta la cabecera #EXTM3U.' });
+      return res.status(400).json({ error: 'Archivo M3U inválido: Falta la cabecera #EXTM3U.' });
     }
     for (const line of lines) {
       if (line.startsWith('#EXTINF:')) {
@@ -275,13 +282,13 @@ export const processM3UAdmin = async (req, res, next) => {
           currentChannel.logo = infoMatch[3] || '';
           currentChannel.section = infoMatch[4] || 'General';
         } else {
-           const nameMatch = line.match(/#EXTINF:-1,(.+)/);
-           if (nameMatch) currentChannel.name = nameMatch[1].trim();
+          const nameMatch = line.match(/#EXTINF:-1,(.+)/);
+          if (nameMatch) currentChannel.name = nameMatch[1].trim();
         }
       } else if (line.trim() && !line.startsWith('#') && currentChannel.name) {
         currentChannel.url = line.trim();
         if (currentChannel.name && currentChannel.url) {
-            channelsToAdd.push(currentChannel);
+          channelsToAdd.push(currentChannel);
         }
         currentChannel = {};
       }
@@ -291,18 +298,18 @@ export const processM3UAdmin = async (req, res, next) => {
     }
     let channelsAddedCount = 0;
     for (const chData of channelsToAdd) {
-        try {
-            const existingChannel = await Channel.findOne({ url: chData.url });
-            if (!existingChannel) {
-                const newChannel = new Channel(chData);
-                await newChannel.save();
-                channelsAddedCount++;
-            } else {
-                console.log(`CTRL: processM3UAdmin - Canal ya existente (misma URL): ${chData.url}, omitiendo.`);
-            }
-        } catch (saveError) {
-            console.error(`CTRL: processM3UAdmin - Error guardando canal individual ${chData.name}: ${saveError.message}`);
+      try {
+        const existingChannel = await Channel.findOne({ url: chData.url });
+        if (!existingChannel) {
+          const newChannel = new Channel(chData);
+          await newChannel.save();
+          channelsAddedCount++;
+        } else {
+          console.log(`CTRL: processM3UAdmin - Canal ya existente (misma URL): ${chData.url}, omitiendo.`);
         }
+      } catch (saveError) {
+        console.error(`CTRL: processM3UAdmin - Error guardando canal individual ${chData.name}: ${saveError.message}`);
+      }
     }
     console.log(`CTRL: processM3UAdmin - Canales procesados del M3U: ${channelsToAdd.length}, Canales nuevos añadidos: ${channelsAddedCount}`);
     res.json({ message: `M3U procesado. ${channelsAddedCount} canales nuevos añadidos de ${channelsToAdd.length} encontrados.`, channelsAdded: channelsAddedCount });

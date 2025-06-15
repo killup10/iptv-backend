@@ -35,12 +35,14 @@ const channelSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  requiresPlan: { 
-    type: [{
+    requiresPlan: {
+      type: [{
       type: String,
-      enum: ['basico', 'estandar', 'cinefilo', 'sports', 'premium', 'free_preview'], // AÑADIDO 'estandar', 'basico' (en lugar de gplay si era separado)
+ // Plan requerido para acceder al canal. 'gplay' es el plan básico.
+      // Se acepta 'basico' únicamente para compatibilidad con datos antiguos.
+      enum: ['gplay', 'estandar', 'cinefilo', 'sports', 'premium', 'free_preview'],    
     }],
-    default: ['basico'] // Default al plan más básico
+    default: ['gplay']
   },
   isPubliclyVisible: { 
     type: Boolean,

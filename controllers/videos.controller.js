@@ -11,9 +11,11 @@ export const getContinueWatching = async (req, res, next) => {
       return res.status(401).json({ error: "No se pudo identificar al usuario." });
     }
 
-    const userPlan = req.user.plan || 'gplay';
-    const isAdminUser = req.user.role === 'admin';
-
+     const userPlanFromToken = req.user.plan || 'gplay';
+  // Normalizar el plan en caso de que algunos usuarios sigan teniendo
+  // el valor antiguo 'basico' guardado
+  const normalizedUserPlanKey = userPlanFromToken === 'basico' ? 'gplay' : userPlanFromToken;
+  const isAdminUser = req.user.role === 'admin';
     // 2. Construir la consulta para encontrar el progreso del usuario específico
     let query = {
       active: true,
@@ -30,7 +32,7 @@ export const getContinueWatching = async (req, res, next) => {
     // 3. Aplicar filtro de plan si el usuario no es admin
     if (!isAdminUser) {
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
-      const userPlanLevel = planHierarchy[userPlan] || 0;
+      const userPlanLevel = planHierarchy[normalizedUserPlanKey] || 0;
       const accessiblePlanKeys = Object.keys(planHierarchy).filter(
         planKey => planHierarchy[planKey] <= userPlanLevel
       );

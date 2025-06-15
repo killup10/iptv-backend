@@ -18,7 +18,8 @@
     "mongoose": "^7.0.3",
     "multer": "^1.4.4",
     "node-fetch": "^2.7.0",
-    "shaka-player": "^4.14.11"
+    "shaka-player": "^4.14.11",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

@@ -10,6 +10,7 @@ import videosRoutes from "./routes/videos.routes.js";
 import m3uRoutes from "./routes/m3u.routes.js";
 import adminContentRoutes from "./routes/adminContent.routes.js";
 import channelsRoutes from "./routes/channels.routes.js";
+import deviceRoutes from "./routes/device.routes.js";
 
 dotenv.config();
 
@@ -118,6 +119,8 @@ app.use("/api/videos", videosRoutes);
 app.use("/api/m3u", m3uRoutes);
 app.use("/api/admin-content", adminContentRoutes);
 app.use("/api/channels", channelsRoutes);
+app.use("/api/devices", deviceRoutes);
+
 
 // --- MongoDB ---
 const PORT = process.env.PORT || 3000;

@@ -64,9 +64,6 @@ router.get("/public/featured-series", async (req, res, next) => {
 
 router.get("/main-sections", verifyToken, async (req, res, next) => {
   try {
-    const userPlan = req.user.plan || 'gplay';
-    const isAdminUser = req.user.role === 'admin';
-    
     const ALL_POSSIBLE_SECTIONS = [
       { key: "POR_GENERO", displayName: "POR GÉNEROS", thumbnailSample: "/img/placeholders/por_generos.jpg", requiresPlan: "gplay", order: 0 },
       { key: "ESPECIALES", displayName: "ESPECIALES (Festividades)", thumbnailSample: "/img/placeholders/especiales.jpg", requiresPlan: "gplay", order: 1 },
@@ -75,34 +72,26 @@ router.get("/main-sections", verifyToken, async (req, res, next) => {
       { key: "CINE_60FPS", displayName: "CINE 60 FPS", thumbnailSample: "/img/placeholders/cine_60fps.jpg", requiresPlan: "premium", order: 4 },
     ];
 
-    let accessibleSections = [];
-    if (isAdminUser) {
-        accessibleSections = ALL_POSSIBLE_SECTIONS;
-    } else {
-        const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
-        const userPlanLevel = planHierarchy[userPlan] || 0;
-        ALL_POSSIBLE_SECTIONS.forEach(section => {
-            const requiredSectionPlanLevel = planHierarchy[section.requiresPlan] || 0;
-            if (userPlanLevel >= requiredSectionPlanLevel) {
-                accessibleSections.push(section);
-            }
-        });
-    }
-    
-    for (let section of accessibleSections) {
-        if (section.key !== "POR_GENERO") {
-            const randomMovieForThumb = await Video.findOne({ 
-                mainSection: section.key, 
-                active: true, 
-                logo: { $ne: null, $ne: "" } 
-            }).sort({ createdAt: -1 });
-            if (randomMovieForThumb && randomMovieForThumb.logo) {
-                section.thumbnailSample = randomMovieForThumb.logo;
-            }
+    // Ahora devolvemos todas las secciones sin importar el plan
+    const allSections = [...ALL_POSSIBLE_SECTIONS];
+
+    // Opcional: Actualizar los thumbnails dinámicamente
+    for (let section of allSections) {
+      if (section.key !== "POR_GENERO") {
+        const randomMovieForThumb = await Video.findOne({
+          mainSection: section.key,
+          active: true,
+          logo: { $ne: null, $ne: "" }
+        }).sort({ createdAt: -1 });
+
+        if (randomMovieForThumb && randomMovieForThumb.logo) {
+          section.thumbnailSample = randomMovieForThumb.logo;
         }
+      }
     }
-    console.log(`BACKEND /main-sections - User: ${req.user.username}, Plan: ${userPlan}, EsAdmin: ${isAdminUser}, Secciones Enviadas: ${accessibleSections.map(s=>s.key).join(', ')}`);
-    res.json(accessibleSections.sort((a,b) => a.order - b.order));
+
+    console.log(`BACKEND /main-sections - Mostrando todas las secciones (sin filtrar por plan): ${allSections.map(s => s.key).join(', ')}`);
+    res.json(allSections.sort((a, b) => a.order - b.order));
   } catch (error) {
     console.error("Error en GET /api/videos/main-sections:", error);
     next(error);
@@ -194,19 +183,19 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
 
 // === OTRAS RUTAS DE VÍDEO (CRUD, etc.) ===
 
-// GET /api/videos (Listar VODs para usuarios y admin)
+// GET /api/videos (Listar VODs para usuarios y admin con PAGINACIÓN Y BÚSQUEDA)
 router.get("/", verifyToken, async (req, res, next) => {
   try {
     const userPlan = req.user.plan || 'gplay';
     const isAdminView = req.user.role === 'admin' && req.query.view === 'admin';
-    let query = { active: true }; 
+    let query = {}; 
 
     if (isAdminView) {
       console.log("BACKEND GET /api/videos - Es AdminView.");
-      query = {}; 
       if (req.query.active === 'true') query.active = true;
       if (req.query.active === 'false') query.active = false;
     } else {
+      query.active = true; 
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
       const userPlanLevel = planHierarchy[userPlan] || 0;
       const accessiblePlanKeys = Object.keys(planHierarchy).filter(
@@ -218,20 +207,25 @@ router.get("/", verifyToken, async (req, res, next) => {
     if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") query.mainSection = req.query.mainSection;
     if (req.query.genre && req.query.genre !== "Todas") query.genres = req.query.genre;
     if (req.query.tipo) query.tipo = req.query.tipo;
-    if (req.query.search) query.$text = { $search: req.query.search };
     
-    // --- INICIO DE LA CORRECCIÓN CLAVE ---
+    // Aplicar filtro de búsqueda usando el índice de texto
+    if (req.query.search) {
+      query.$text = { $search: req.query.search };
+    }
     
-    // 1. Contar el total de documentos que coinciden con la consulta (antes de aplicar limit/skip)
-    const total = await Video.countDocuments(query);
-    
-    // 2. Obtener los documentos de la página actual
+    // Lógica de paginación
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15; // Límite por defecto
+    const skip = (page - 1) * limit;
+
+    // Ejecutar consulta para obtener videos de la página actual
     const videos = await Video.find(query)
-                                .sort(req.query.sort || { createdAt: -1 })
-                                .limit(parseInt(req.query.limit) || 50)
-                                .skip(parseInt(req.query.skip) || 0);
+                              .sort(req.query.search ? { score: { $meta: "textScore" } } : (req.query.sort || { createdAt: -1 })) // Ordenar por relevancia en búsqueda
+                              .limit(limit)
+                              .skip(skip);
     
-    // --- FIN DE LA CORRECCIÓN CLAVE ---
+    // Ejecutar consulta para obtener la cantidad total de documentos que coinciden
+    const total = await Video.countDocuments(query);
     
     const mapToUserFormat = (v) => ({ 
       id: v._id, _id: v._id, name: v.title, title: v.title, 
@@ -255,10 +249,13 @@ router.get("/", verifyToken, async (req, res, next) => {
       user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
     });
 
-    const formattedVideos = isAdminView ? videos.map(mapToFullAdminFormat) : videos.map(mapToUserFormat);
-
-    // 3. Devolver un objeto con los videos de la página y el conteo total
-    res.json({ videos: formattedVideos, total: total });
+    // Devolver resultados paginados y el total
+    res.json({
+      videos: isAdminView ? videos.map(mapToFullAdminFormat) : videos.map(mapToUserFormat),
+      total: total,
+      page: page,
+      pages: Math.ceil(total / limit)
+    });
 
   } catch (error) { 
     console.error("Error en BACKEND GET /api/videos:", error);
