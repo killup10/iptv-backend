@@ -34,11 +34,17 @@ router.get("/public/featured-movies", async (req, res, next) => {
   try {
     const criteria = { tipo: "pelicula", isFeatured: true, active: true };
     const movies = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-        id: v._id, _id: v._id, name: v.title, title: v.title,
-        thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-        trailerUrl: v.trailerUrl || ""
-    });
+   const mapVODToPublicFormat = (v) => ({
+  id: v._id,
+  _id: v._id,
+  name: v.title,
+  title: v.title,
+  releaseYear: v.releaseYear || null, // 👈 NECESARIO
+  description: v.description || "",
+  genres: v.genres || [],
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  trailerUrl: v.trailerUrl || ""
+});
     res.json(movies.map(mapVODToPublicFormat));
   } catch (error) { 
     console.error("Error en BACKEND /public/featured-movies:", error);
@@ -50,11 +56,17 @@ router.get("/public/featured-series", async (req, res, next) => {
   try {
     const criteria = { tipo: "serie", isFeatured: true, active: true };
     const series = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-        id: v._id, _id: v._id, name: v.title, title: v.title,
-        thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-        trailerUrl: v.trailerUrl || ""
-    });
+   const mapVODToPublicFormat = (v) => ({
+  id: v._id,
+  _id: v._id,
+  name: v.title,
+  title: v.title,
+  releaseYear: v.releaseYear || null, // 👈 NECESARIO
+  description: v.description || "",
+  genres: v.genres || [],
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  trailerUrl: v.trailerUrl || ""
+});
     res.json(series.map(mapVODToPublicFormat));
   } catch (error) { 
     console.error("Error en BACKEND /public/featured-series:", error.message);
@@ -218,17 +230,30 @@ router.get("/", verifyToken, async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 15; // Límite por defecto
     const skip = (page - 1) * limit;
 
+     // Determinar opción de ordenamiento
+    let sortOption = { createdAt: -1 };
+    if (req.query.search) {
+      sortOption = { score: { $meta: "textScore" } };
+    } else if (req.query.sort === 'alphabetical' || (req.query.tipo === 'pelicula' && !req.query.sort)) {
+      // Por defecto ordenamos alfabéticamente las películas si no se especifica otro orden
+      sortOption = { title: 1 };
+    }
+
+
     // Ejecutar consulta para obtener videos de la página actual
     const videos = await Video.find(query)
-                              .sort(req.query.search ? { score: { $meta: "textScore" } } : (req.query.sort || { createdAt: -1 })) // Ordenar por relevancia en búsqueda
-                              .limit(limit)
-                              .skip(skip);
-    
+  .sort(sortOption)
+  .limit(limit)
+  .skip(skip);
+                                  
     // Ejecutar consulta para obtener la cantidad total de documentos que coinciden
     const total = await Video.countDocuments(query);
     
     const mapToUserFormat = (v) => ({ 
-      id: v._id, _id: v._id, name: v.title, title: v.title, 
+      id: v._id,
+        _id: v._id,
+        name: v.title,
+        title: v.title,
       thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "", 
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
       description: v.description || "", trailerUrl: v.trailerUrl || "", 
@@ -257,7 +282,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       pages: Math.ceil(total / limit)
     });
 
-  } catch (error) { 
+  } catch (error) {
     console.error("Error en BACKEND GET /api/videos:", error);
     next(error); 
   }
@@ -333,7 +358,7 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
 
     const savedVideo = await videoData.save();
     res.status(201).json({ message: "Video VOD guardado exitosamente.", video: savedVideo });
-  } catch (error) { 
+  } catch (error) {
     console.error("Error en POST /api/videos:", error);
     next(error); 
   }
@@ -372,7 +397,7 @@ router.post("/upload-link", verifyToken, isAdmin, async (req, res, next) => {
 
     const savedVideo = await videoData.save();
     res.status(201).json({ message: "Video VOD guardado exitosamente.", video: savedVideo });
-  } catch (error) { 
+  } catch (error) {
     console.error("Error en POST /api/videos/upload-link:", error);
     next(error); 
   }
@@ -492,7 +517,7 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
     if (!updatedVideo) return res.status(404).json({ error: "Video no encontrado para actualizar." });
 
     res.json({ message: "Video VOD actualizado exitosamente.", video: updatedVideo });
-  } catch (error) { 
+  } catch (error) {
     console.error(`Error en PUT /api/videos/${req.params.id}:`, error);
     next(error); 
   }
@@ -507,7 +532,7 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res, next) => {
     const deletedVideo = await Video.findByIdAndDelete(req.params.id);
     if (!deletedVideo) return res.status(404).json({ error: "Video no encontrado para eliminar." });
     res.json({ message: "Video VOD eliminado exitosamente." });
-  } catch (error) { 
+  } catch (error) {
     console.error(`Error en DELETE /api/videos/${req.params.id}:`, error);
     next(error); 
   }
