@@ -1,5 +1,6 @@
 import Video from "../models/Video.js";
 import mongoose from "mongoose";
+import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 
 // --- FUNCIÓN CORREGIDA ---
 // Obtiene la lista de "Continuar Viendo" específica para el usuario actual.
@@ -231,20 +232,28 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
           // Agrupar capítulos por serie
           const seriesKey = currentVideoData.seriesName;
           if (!seriesMap.has(seriesKey)) {
-            seriesMap.set(seriesKey, {
-              title: currentVideoData.seriesName,
-              tipo: "serie",
-              subtipo: detectSubtipo(currentVideoData.seriesName, currentVideoData.genres),
-              description: "",
-              releaseYear: currentVideoData.releaseYear,
-              genres: currentVideoData.genres,
-              active: true,
-              isFeatured: false,
-              mainSection: "POR_GENERO",
-              requiresPlan: ["gplay"],
-              user: req.user.id,
-              chapters: []
-            });
+            // Detectar el subtipo
+            const detectedSubtipo = detectSubtipo(currentVideoData.seriesName, currentVideoData.genres);
+            
+            seriesMap.set(seriesKey, {
+              title: currentVideoData.seriesName,
+              tipo: "serie",
+              subtipo: detectedSubtipo,
+              description: "",
+              releaseYear: currentVideoData.releaseYear,
+              genres: [...currentVideoData.genres],
+              active: true,
+              isFeatured: false,
+              mainSection: detectedSubtipo === 'anime' ? 'ANIMES' : 'POR_GENERO',
+              requiresPlan: ["gplay"],
+              user: req.user.id,
+              chapters: []
+            });
+
+            // Si es anime, asegurarse de que tenga el género "Anime"
+            if (detectedSubtipo === 'anime' && !seriesMap.get(seriesKey).genres.includes('Anime')) {
+              seriesMap.get(seriesKey).genres.push('Anime');
+            }
           }
           
           // Agregar capítulo a la serie
@@ -295,10 +304,9 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
           try {
             const existingVideo = await Video.findOne({ url: vodData.url });
             if (!existingVideo) {
-              // Aquí podrías añadir lógica para obtener thumbnail de TMDB si no se provee logo
-              // if (!vodData.logo && vodData.title) {
-              //   vodData.logo = await getTMDBThumbnail(vodData.title, vodData.releaseYear);
-              // }
+              if (!vodData.logo && !vodData.customThumbnail && vodData.title) {
+              vodData.tmdbThumbnail = await getTMDBThumbnail(vodData.title);
+            }
               const newVideo = new Video(vodData);
               await newVideo.save();
               vodsAddedCount++;

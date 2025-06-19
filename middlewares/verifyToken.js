@@ -1,6 +1,8 @@
 // killup10/iptv-backend/middlewares/verifyToken.js
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Device from "../models/Device.js";
+
 
 export const verifyToken = async (req, res, next) => {
   console.log(`verifyToken: Iniciando para la ruta ${req.originalUrl} - Método: ${req.method}`);
@@ -38,6 +40,23 @@ export const verifyToken = async (req, res, next) => {
       console.log(`verifyToken: Suscripción del usuario ${user.username} ha expirado en ${user.expiresAt}.`);
       return res.status(403).json({ error: "Tu suscripción ha expirado." });
     }
+
+    // Validación de dispositivo para usuarios que no son admin
+    if (user.role !== 'admin') {
+      const deviceId = req.headers['x-device-id'];
+      if (!deviceId) {
+        return res.status(400).json({ error: "Falta el header 'x-device-id'." });
+      }
+
+      const device = await Device.findOne({ userId: user._id, deviceId, isActive: true });
+      if (!device) {
+        return res.status(403).json({ error: "Este dispositivo no está autorizado o fue desactivado." });
+      }
+
+      device.lastSeen = new Date();
+      await device.save();
+    }
+
 
     req.user = user; // Adjuntar el usuario a la request
     console.log(`verifyToken: Verificación exitosa para ${user.username}. Llamando a next().`);

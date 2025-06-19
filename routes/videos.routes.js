@@ -3,6 +3,7 @@ import multer from "multer";
 import mongoose from "mongoose";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
+import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin } from "../controllers/videos.controller.js";
 
@@ -68,9 +69,31 @@ router.get("/public/featured-series", async (req, res, next) => {
   trailerUrl: v.trailerUrl || ""
 });
     res.json(series.map(mapVODToPublicFormat));
-  } catch (error) { 
+  } catch (error) {
     console.error("Error en BACKEND /public/featured-series:", error.message);
-    next(error); 
+        next(error);
+  }
+});
+
+router.get("/public/featured-animes", async (req, res, next) => {
+  try {
+    const criteria = { tipo: "anime", isFeatured: true, active: true };
+    const animes = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(animes.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-animes:", error.message);
+    next(error);
   }
 });
 
@@ -218,7 +241,22 @@ router.get("/", verifyToken, async (req, res, next) => {
 
     if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") query.mainSection = req.query.mainSection;
     if (req.query.genre && req.query.genre !== "Todas") query.genres = req.query.genre;
-    if (req.query.tipo) query.tipo = req.query.tipo;
+    
+    // Handle excludeTipo parameter
+    if (req.query.excludeTipo) {
+      query.tipo = { $ne: req.query.excludeTipo };
+    }
+    
+    // Handle tipo and subtipo for proper anime filtering
+    if (req.query.tipo === 'serie' && req.query.subtipo === 'anime') {
+      // If requesting anime series, look for either tipo: 'anime' or (tipo: 'serie' and subtipo: 'anime')
+      query.$or = [
+        { tipo: 'anime' },
+        { tipo: 'serie', subtipo: 'anime' }
+      ];
+    } else if (req.query.tipo) {
+      query.tipo = req.query.tipo;
+    }
     
     // Aplicar filtro de búsqueda usando el índice de texto
     if (req.query.search) {
@@ -355,6 +393,9 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       chapters: chapters || [],
       watchProgress: [] // Correcto: Inicializar como array vacío para progreso multiusuario
     });
+     if (!videoData.logo && !videoData.customThumbnail && videoData.title) {
+      videoData.tmdbThumbnail = await getTMDBThumbnail(videoData.title);
+    }
 
     const savedVideo = await videoData.save();
     res.status(201).json({ message: "Video VOD guardado exitosamente.", video: savedVideo });
