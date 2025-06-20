@@ -10,3 +10,4 @@ nuevo registro.
 
 1. Subir archivo `.m3u` a `/api/upload-m3u` (form-data: `file`)
 2. Obtener lista de videos en `/api/videos`
+3. Gestionar series con las rutas `/api/admin-content/series`

@@ -1,4 +1,4 @@
-import express from "express";
+gitimport express from "express";
 import multer from "multer";
 import mongoose from "mongoose";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
@@ -300,17 +300,33 @@ router.get("/", verifyToken, async (req, res, next) => {
       requiresPlan: v.requiresPlan 
     });
     
-    const mapToFullAdminFormat = (v) => ({ 
-      id: v._id, _id: v._id, title: v.title, name: v.title, 
-      description: v.description, url: v.url, tipo: v.tipo, 
-      mainSection: v.mainSection, genres: v.genres, 
-      requiresPlan: v.requiresPlan, releaseYear: v.releaseYear, 
-      isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
-      customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
-      trailerUrl: v.trailerUrl, active: v.active,
-      subcategoria: v.tipo === "serie" ? (v.subcategoria || "Netflix") : undefined,
-      user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
-    });
+    const mapToFullAdminFormat = (v) => {
+      console.log('Debug - Processing video:', v.title);
+      console.log('Debug - Video tipo:', v.tipo);
+      console.log('Debug - Raw chapters:', JSON.stringify(v.chapters, null, 2));
+      
+      const mappedVideo = { 
+        id: v._id, _id: v._id, title: v.title, name: v.title, 
+        description: v.description, url: v.url, tipo: v.tipo, 
+        mainSection: v.mainSection, genres: v.genres, 
+        requiresPlan: v.requiresPlan, releaseYear: v.releaseYear, 
+        isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
+        customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
+        trailerUrl: v.trailerUrl, active: v.active,
+        subcategoria: v.tipo === "serie" ? (v.subcategoria || "Netflix") : undefined,
+        chapters: v.tipo !== "pelicula" ? (v.chapters || []).map(ch => ({
+          title: ch.title,
+          url: ch.url,
+          thumbnail: ch.thumbnail || "",
+          duration: ch.duration || "0:00",
+          description: ch.description || ""
+        })) : [],
+        user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
+      };
+      
+      console.log('Debug - Mapped chapters:', JSON.stringify(mappedVideo.chapters, null, 2));
+      return mappedVideo;
+    };
 
     // Devolver resultados paginados y el total
     res.json({
@@ -506,7 +522,13 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       description: video.description || "",
       tipo: video.tipo,
       subcategoria: video.subcategoria,
-      chapters: chapters
+      chapters: video.tipo !== "pelicula" ? (video.chapters || []).map(ch => ({
+        title: ch.title,
+        url: ch.url,
+        thumbnail: ch.thumbnail || "",
+        duration: ch.duration || "0:00",
+        description: ch.description || ""
+      })) : []
     };
     res.json(response);
   } catch (err) { next(err); }

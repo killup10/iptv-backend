@@ -11,6 +11,7 @@ import m3uRoutes from "./routes/m3u.routes.js";
 import adminContentRoutes from "./routes/adminContent.routes.js";
 import channelsRoutes from "./routes/channels.routes.js";
 import deviceRoutes from "./routes/device.routes.js";
+import capitulosRoutes from "./routes/capitulos.routes.js";
 
 dotenv.config();
 
@@ -120,6 +121,8 @@ app.use("/api/m3u", m3uRoutes);
 app.use("/api/admin-content", adminContentRoutes);
 app.use("/api/channels", channelsRoutes);
 app.use("/api/devices", deviceRoutes);
+app.use("/api/capitulos", capitulosRoutes);
+
 
 
 // --- MongoDB ---

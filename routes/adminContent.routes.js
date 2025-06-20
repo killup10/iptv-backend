@@ -18,6 +18,26 @@ router.post("/vod", verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// POST /api/admin-content/series
+router.post("/series", verifyToken, isAdmin, async (req, res) => {
+  const { title, url } = req.body;
+  if (!title || !url) return res.status(400).json({ error: "Faltan campos" });
+
+  try {
+    const content = await Content.create({ title, url, type: "series" });
+    res.json({ success: true, content });
+  } catch (err) {
+    res.status(500).json({ error: "Error al guardar el contenido" });
+  }
+});
+
+// GET /api/admin-content/series
+router.get("/series", verifyToken, isAdmin, async (req, res) => {
+  const content = await Content.find({ type: "series" }).sort({ createdAt: -1 });
+  res.json(content);
+});
+
+
 // GET /api/admin-content
 router.get("/", verifyToken, isAdmin, async (req, res) => {
   const content = await Content.find().sort({ createdAt: -1 });
