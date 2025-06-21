@@ -1,4 +1,4 @@
-gitimport express from "express";
+import express from "express";
 import multer from "multer";
 import mongoose from "mongoose";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
@@ -567,14 +567,35 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
       }
     }
 
+    // Primero obtenemos el video existente para preservar los capítulos si no se proporcionan nuevos
+    const existingVideo = await Video.findById(req.params.id);
+    if (!existingVideo) {
+      return res.status(404).json({ error: "Video no encontrado para actualizar." });
+    }
+
     const updateData = {
-      title, url, tipo, mainSection, requiresPlan: requiresPlan || [],
+      title, 
+      url, 
+      tipo, 
+      mainSection, 
+      requiresPlan: requiresPlan || [],
       genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : undefined),
-      description, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail,
-      chapters: Array.isArray(chapters) ? chapters : undefined,
+      description, 
+      trailerUrl, 
+      releaseYear, 
+      isFeatured, 
+      active, 
+      logo, 
+      customThumbnail,
+      // Mantener los capítulos existentes si no se proporcionan nuevos
+      chapters: Array.isArray(chapters) ? chapters : existingVideo.chapters,
       subcategoria: tipo === "serie" ? req.body.subcategoria : undefined
     };
+
+    // Solo eliminar las propiedades que son explícitamente undefined
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+    console.log('Debug - Actualizando video con capítulos:', JSON.stringify(updateData.chapters, null, 2));
 
     const updatedVideo = await Video.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
     if (!updatedVideo) return res.status(404).json({ error: "Video no encontrado para actualizar." });
