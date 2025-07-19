@@ -12,6 +12,7 @@ import adminContentRoutes from "./routes/adminContent.routes.js";
 import channelsRoutes from "./routes/channels.routes.js";
 import deviceRoutes from "./routes/device.routes.js";
 import capitulosRoutes from "./routes/capitulos.routes.js";
+import Device from "./models/Device.js";
 
 dotenv.config();
 
@@ -125,12 +126,55 @@ app.use("/api/capitulos", capitulosRoutes);
 
 
 
+// --- Funciones de limpieza automática de dispositivos ---
+const runDeviceCleanup = async () => {
+  try {
+    console.log('🧹 Ejecutando limpieza automática de dispositivos...');
+    
+    // Desactivar dispositivos obsoletos (más de 7 días sin actividad)
+    const staleResult = await Device.deactivateStale(7);
+    console.log(`✅ ${staleResult.modifiedCount} dispositivos obsoletos desactivados`);
+    
+    // Eliminar dispositivos inactivos antiguos (más de 30 días)
+    const cleanupResult = await Device.cleanupInactive(30);
+    console.log(`✅ ${cleanupResult.deletedCount} dispositivos inactivos eliminados`);
+    
+    // Estadísticas
+    const totalActive = await Device.countDocuments({ isActive: true });
+    const totalInactive = await Device.countDocuments({ isActive: false });
+    console.log(`📊 Dispositivos activos: ${totalActive}, inactivos: ${totalInactive}`);
+    
+  } catch (error) {
+    console.error('❌ Error en limpieza automática de dispositivos:', error);
+  }
+};
+
+// Programar limpieza automática cada 6 horas
+const scheduleDeviceCleanup = () => {
+  const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000; // 6 horas en milisegundos
+  
+  // Ejecutar limpieza inicial después de 5 minutos del inicio del servidor
+  setTimeout(runDeviceCleanup, 5 * 60 * 1000);
+  
+  // Programar limpieza periódica
+  setInterval(runDeviceCleanup, CLEANUP_INTERVAL);
+  
+  console.log('⏰ Limpieza automática de dispositivos programada cada 6 horas');
+};
+
 // --- MongoDB ---
 const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB conectado");
-    app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));
+    
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+      
+      // Programar limpieza automática de dispositivos
+      scheduleDeviceCleanup();
+    });
   })
   .catch(err => {
     console.error("❌ Error crítico con MongoDB:", err);

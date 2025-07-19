@@ -5,7 +5,8 @@ import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
-import { getContinueWatching, createBatchVideosFromTextAdmin } from "../controllers/videos.controller.js";
+import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin } from "../controllers/videos.controller.js";
+
 
 const router = express.Router();
 
@@ -35,17 +36,18 @@ router.get("/public/featured-movies", async (req, res, next) => {
   try {
     const criteria = { tipo: "pelicula", isFeatured: true, active: true };
     const movies = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-   const mapVODToPublicFormat = (v) => ({
-  id: v._id,
-  _id: v._id,
-  name: v.title,
-  title: v.title,
-  releaseYear: v.releaseYear || null, // 👈 NECESARIO
-  description: v.description || "",
-  genres: v.genres || [],
-  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  trailerUrl: v.trailerUrl || ""
-});
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null, 
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
     res.json(movies.map(mapVODToPublicFormat));
   } catch (error) { 
     console.error("Error en BACKEND /public/featured-movies:", error);
@@ -55,29 +57,40 @@ router.get("/public/featured-movies", async (req, res, next) => {
 
 router.get("/public/featured-series", async (req, res, next) => {
   try {
-    const criteria = { tipo: "serie", isFeatured: true, active: true };
+    // CAMBIO: Asegurarse de que el 'tipo' es 'serie', 'anime', 'dorama', 'novela', 'documental'
+    const criteria = { 
+      tipo: { $in: ["serie", "anime", "dorama", "novela", "documental"] }, 
+      isFeatured: true, 
+      active: true 
+    };
     const series = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-   const mapVODToPublicFormat = (v) => ({
-  id: v._id,
-  _id: v._id,
-  name: v.title,
-  title: v.title,
-  releaseYear: v.releaseYear || null, // 👈 NECESARIO
-  description: v.description || "",
-  genres: v.genres || [],
-  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  trailerUrl: v.trailerUrl || ""
-});
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null, 
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
     res.json(series.map(mapVODToPublicFormat));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-series:", error.message);
-        next(error);
+    next(error);
   }
 });
 
 router.get("/public/featured-animes", async (req, res, next) => {
   try {
-    const criteria = { tipo: "anime", isFeatured: true, active: true };
+    // CAMBIO: Asegurarse de que el 'tipo' es 'anime' o 'serie' con subtipo 'anime'
+    const criteria = { 
+      $or: [{ tipo: "anime" }, { tipo: "serie", subtipo: "anime" }], 
+      isFeatured: true, 
+      active: true 
+    };
     const animes = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
       id: v._id,
@@ -87,6 +100,7 @@ router.get("/public/featured-animes", async (req, res, next) => {
       releaseYear: v.releaseYear || null,
       description: v.description || "",
       genres: v.genres || [],
+      mainSection: v.mainSection || "",
       thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
       trailerUrl: v.trailerUrl || ""
     });
@@ -107,10 +121,8 @@ router.get("/main-sections", verifyToken, async (req, res, next) => {
       { key: "CINE_60FPS", displayName: "CINE 60 FPS", thumbnailSample: "/img/placeholders/cine_60fps.jpg", requiresPlan: "premium", order: 4 },
     ];
 
-    // Ahora devolvemos todas las secciones sin importar el plan
     const allSections = [...ALL_POSSIBLE_SECTIONS];
 
-    // Opcional: Actualizar los thumbnails dinámicamente
     for (let section of allSections) {
       if (section.key !== "POR_GENERO") {
         const randomMovieForThumb = await Video.findOne({
@@ -154,12 +166,19 @@ router.get("/:id/progress", verifyToken, async (req, res, next) => {
     ).select('watchProgress');
 
     if (!video || !video.watchProgress || video.watchProgress.length === 0) {
+      // CAMBIO: Inicializar lastSeason a 0 en la respuesta por defecto
       return res.json({ 
-        watchProgress: { userId, lastChapter: 0, lastTime: 0, lastWatched: null, completed: false }
+        watchProgress: { userId, lastSeason: 0, lastChapter: 0, lastTime: 0, lastWatched: null, completed: false }
       });
     }
     
-    res.json({ watchProgress: video.watchProgress[0] });
+    // CAMBIO: Asegurarse de que lastSeason exista en la entrada de progreso si no está
+    const userProgress = video.watchProgress[0];
+    if (userProgress.lastSeason === undefined) {
+      userProgress.lastSeason = 0;
+    }
+    
+    res.json({ watchProgress: userProgress });
   } catch (error) {
     console.error(`Error en GET /:id/progress para user ${req.user?.id}:`, error);
     next(error);
@@ -174,10 +193,19 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
       return res.status(400).json({ error: "ID de video con formato inválido." });
     }
     const userId = req.user.id;
-    const { lastChapter, lastTime, completed } = req.body;
+    // CAMBIO: Recibir lastSeason del body
+    const { lastSeason, lastChapter, lastTime, completed, progress } = req.body; 
 
     if (typeof lastTime !== 'number' || lastTime < 0) {
       return res.status(400).json({ error: "lastTime debe ser un número positivo." });
+    }
+    // CAMBIO: Validar lastSeason si se proporciona
+    if (lastSeason !== undefined && typeof lastSeason !== 'number' || lastSeason < 0) {
+        return res.status(400).json({ error: "lastSeason debe ser un número positivo o cero." });
+    }
+    // CAMBIO: Validar progress si se proporciona
+    if (progress !== undefined && typeof progress !== 'number' || progress < 0 || progress > 1) {
+      return res.status(400).json({ error: "progress debe ser un número entre 0 y 1." });
     }
 
     const video = await Video.findById(videoId);
@@ -190,6 +218,10 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
       // Actualiza la entrada existente
       video.watchProgress[progressIndex].lastTime = lastTime;
       if (lastChapter !== undefined) video.watchProgress[progressIndex].lastChapter = lastChapter;
+      // CAMBIO: Actualizar lastSeason y progress
+      if (lastSeason !== undefined) video.watchProgress[progressIndex].lastSeason = lastSeason;
+      if (progress !== undefined) video.watchProgress[progressIndex].progress = progress;
+
       if (completed !== undefined) video.watchProgress[progressIndex].completed = completed;
       video.watchProgress[progressIndex].lastWatched = new Date();
       userProgressEntry = video.watchProgress[progressIndex];
@@ -199,6 +231,9 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
         userId: new mongoose.Types.ObjectId(userId),
         lastTime,
         lastChapter: lastChapter !== undefined ? lastChapter : 0,
+        // CAMBIO: Incluir lastSeason y progress
+        lastSeason: lastSeason !== undefined ? lastSeason : 0,
+        progress: progress !== undefined ? progress : 0,
         completed: completed !== undefined ? completed : false,
         lastWatched: new Date()
       };
@@ -268,7 +303,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 15; // Límite por defecto
     const skip = (page - 1) * limit;
 
-     // Determinar opción de ordenamiento
+    // Determinar opción de ordenamiento
     let sortOption = { createdAt: -1 };
     if (req.query.search) {
       sortOption = { score: { $meta: "textScore" } };
@@ -280,32 +315,30 @@ router.get("/", verifyToken, async (req, res, next) => {
 
     // Ejecutar consulta para obtener videos de la página actual
     const videos = await Video.find(query)
-  .sort(sortOption)
-  .limit(limit)
-  .skip(skip);
-                                  
+      .sort(sortOption)
+      .limit(limit)
+      .skip(skip);
+                                
     // Ejecutar consulta para obtener la cantidad total de documentos que coinciden
     const total = await Video.countDocuments(query);
     
     const mapToUserFormat = (v) => ({ 
       id: v._id,
-        _id: v._id,
-        name: v.title,
-        title: v.title,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
       thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "", 
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
       description: v.description || "", trailerUrl: v.trailerUrl || "", 
       tipo: v.tipo,
-      subcategoria: v.tipo === "serie" ? (v.subcategoria || "Netflix") : undefined,
+      releaseYear: v.releaseYear || null,
+      subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
       requiresPlan: v.requiresPlan 
     });
     
     const mapToFullAdminFormat = (v) => {
-      console.log('Debug - Processing video:', v.title);
-      console.log('Debug - Video tipo:', v.tipo);
-      console.log('Debug - Raw chapters:', JSON.stringify(v.chapters, null, 2));
-      
-      const mappedVideo = { 
+      // CAMBIO: Mapear 'seasons' en lugar de 'chapters'
+      return { 
         id: v._id, _id: v._id, title: v.title, name: v.title, 
         description: v.description, url: v.url, tipo: v.tipo, 
         mainSection: v.mainSection, genres: v.genres, 
@@ -313,19 +346,20 @@ router.get("/", verifyToken, async (req, res, next) => {
         isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
         customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
         trailerUrl: v.trailerUrl, active: v.active,
-        subcategoria: v.tipo === "serie" ? (v.subcategoria || "Netflix") : undefined,
-        chapters: v.tipo !== "pelicula" ? (v.chapters || []).map(ch => ({
-          title: ch.title,
-          url: ch.url,
-          thumbnail: ch.thumbnail || "",
-          duration: ch.duration || "0:00",
-          description: ch.description || ""
+        subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
+        seasons: v.tipo !== "pelicula" ? (v.seasons || []).map(s => ({
+            seasonNumber: s.seasonNumber,
+            title: s.title,
+            chapters: (s.chapters || []).map(ch => ({
+                title: ch.title,
+                url: ch.url,
+                thumbnail: ch.thumbnail || "",
+                duration: ch.duration || "0:00",
+                description: ch.description || ""
+            }))
         })) : [],
         user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
       };
-      
-      console.log('Debug - Mapped chapters:', JSON.stringify(mappedVideo.chapters, null, 2));
-      return mappedVideo;
     };
 
     // Devolver resultados paginados y el total
@@ -346,7 +380,8 @@ router.get("/", verifyToken, async (req, res, next) => {
 // POST /api/videos (Crear un VOD - usado por AdminPanel)
 router.post("/", verifyToken, isAdmin, async (req, res, next) => {
   try {
-    const { title, description, url, tipo, mainSection, requiresPlan, genres, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, chapters } = req.body;
+    // CAMBIO: Recibir 'seasons' en lugar de 'chapters'
+    const { title, description, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons } = req.body; 
 
     if (!title) return res.status(400).json({ error: "Título es obligatorio." });
     const validTipos = ["pelicula", "serie", "anime", "dorama", "novela", "documental"];
@@ -356,24 +391,35 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
     if (tipo === "pelicula" && !url) {
       return res.status(400).json({ error: "URL es obligatoria para películas." });
     }
-    if (tipo !== "pelicula" && (!chapters || chapters.length === 0)) {
-      return res.status(400).json({ error: "Capítulos son obligatorios para series/anime/dorama/novela/documental." });
+    // CAMBIO: Validar 'seasons' en lugar de 'chapters'
+    if (tipo !== "pelicula" && (!seasons || seasons.length === 0)) {
+      return res.status(400).json({ error: "Temporadas son obligatorias para series/anime/dorama/novela/documental." });
     }
-     if (tipo === "serie") {
-      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas"];
-      if (!req.body.subcategoria || !validSubcategorias.includes(req.body.subcategoria)) {
+    if (tipo !== "pelicula") { // La subcategoría aplica a todo lo que no sea película
+      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"]; // Añadir ZONA KIDS
+      if (!subcategoria || !validSubcategorias.includes(subcategoria)) {
         return res.status(400).json({ 
-          error: `Subcategoría inválida para serie. Opciones válidas: ${validSubcategorias.join(', ')}`,
+          error: `Subcategoría inválida para series/anime/dorama/novela/documental. Opciones válidas: ${validSubcategorias.join(', ')}`,
           validSubcategorias
         });
       }
     }
-    if (chapters && chapters.length > 0) {
-      const invalidChapters = chapters.filter(ch => !ch.title || !ch.url);
-      if (invalidChapters.length > 0) {
-        return res.status(400).json({ error: "Todos los capítulos deben tener título y URL." });
+    // CAMBIO: Validar capítulos dentro de las temporadas
+    if (seasons && seasons.length > 0) {
+      for (const season of seasons) {
+        if (!season.seasonNumber || typeof season.seasonNumber !== 'number' || season.seasonNumber < 1) {
+          return res.status(400).json({ error: "Todas las temporadas deben tener un número de temporada válido (>= 1)." });
+        }
+        if (!season.chapters || season.chapters.length === 0) {
+          return res.status(400).json({ error: `La Temporada ${season.seasonNumber} debe tener al menos un capítulo.` });
+        }
+        const invalidChapters = season.chapters.filter(ch => !ch.title || !ch.url);
+        if (invalidChapters.length > 0) {
+          return res.status(400).json({ error: `Todos los capítulos en la Temporada ${season.seasonNumber} deben tener título y URL.` });
+        }
       }
     }
+
     if (mainSection && !Video.schema.path('mainSection').enumValues.includes(mainSection)) {
       return res.status(400).json({ error: `Sección principal inválida: '${mainSection}'.` });
     }
@@ -395,8 +441,8 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       description: description || "",
       url: url || "",
       tipo: tipo || "pelicula",
-      subtipo: (tipo !== "pelicula") ? tipo : undefined,
-      subcategoria: tipo === "serie" ? req.body.subcategoria : undefined,
+      subtipo: (tipo !== "pelicula") ? (subtipo || tipo) : undefined, // Asegurarse de que subtipo se establezca si no es película
+      subcategoria: tipo !== "pelicula" ? subcategoria : undefined, // Asegurarse de que subcategoria se establezca si no es película
       mainSection: mainSection || "POR_GENERO",
       genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : []),
       requiresPlan: requiresPlan || [],
@@ -406,10 +452,12 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       logo: logo || "",
       customThumbnail: customThumbnail || "",
       trailerUrl: trailerUrl || "",
-      chapters: chapters || [],
-      watchProgress: [] // Correcto: Inicializar como array vacío para progreso multiusuario
+      // CAMBIO: Guardar 'seasons' en lugar de 'chapters'
+      seasons: seasons || [], 
+      watchProgress: [] 
     });
-     if (!videoData.logo && !videoData.customThumbnail && videoData.title) {
+
+    if (!videoData.logo && !videoData.customThumbnail && videoData.title) {
       videoData.tmdbThumbnail = await getTMDBThumbnail(videoData.title);
     }
 
@@ -426,6 +474,7 @@ router.post("/upload-link", verifyToken, isAdmin, async (req, res, next) => {
   try {
     const { title, url, tipo, mainSection, requiresPlan, genres, description, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail } = req.body;
 
+    // Aquí las validaciones son más simples, ya que no se espera una serie con capítulos desde esta ruta
     if (!title || !url || !tipo) return res.status(400).json({ error: "Título, URL y Tipo son obligatorios." });
     if (tipo && !Video.schema.path('tipo').enumValues.includes(tipo)) return res.status(400).json({ error: `Tipo de VOD inválido: '${tipo}'.` });
     if (mainSection && !Video.schema.path('mainSection').enumValues.includes(mainSection)) return res.status(400).json({ error: `Sección principal inválida: '${mainSection}'.` });
@@ -449,7 +498,7 @@ router.post("/upload-link", verifyToken, isAdmin, async (req, res, next) => {
       genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : []),
       requiresPlan: requiresPlan || [],
       releaseYear, isFeatured, active, logo, customThumbnail, trailerUrl,
-      watchProgress: [] // Correcto: Inicializar como array vacío
+      watchProgress: [] 
     });
 
     const savedVideo = await videoData.save();
@@ -474,6 +523,9 @@ router.post("/upload-m3u", verifyToken, isAdmin, upload.single("file"), async (r
   if (!req.file) return res.status(400).json({ error: "No se proporcionó ningún archivo M3U." });
   console.log(`BACKEND /api/videos/upload-m3u: Procesando archivo ${req.file.filename}`);
   try {
+    // CAMBIO: Esta ruta podría ser un alias o una versión más específica
+    // de createBatchVideosFromTextAdmin si se procesan M3U con un formato específico.
+    // Por ahora, se mantiene como un placeholder.
     res.json({ message: "M3U procesado (lógica de ejemplo para VODs).", entriesAdded: 0 });
   } catch (error) {
     console.error("Error procesando M3U para VODs:", error);
@@ -512,8 +564,8 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       }
     }
     if (!canAccess) return res.status(403).json({ error: "Acceso denegado a este video según tu plan." });
-    const chapters = Array.isArray(video.chapters) ? video.chapters : [];
     
+    // CAMBIO: Devolver 'seasons' en lugar de 'chapters'
     const response = {
       id: video._id,
       name: video.title,
@@ -521,14 +573,29 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       url: video.url || "",
       description: video.description || "",
       tipo: video.tipo,
+      subtipo: video.subtipo, // Añadir subtipo
       subcategoria: video.subcategoria,
-      chapters: video.tipo !== "pelicula" ? (video.chapters || []).map(ch => ({
-        title: ch.title,
-        url: ch.url,
-        thumbnail: ch.thumbnail || "",
-        duration: ch.duration || "0:00",
-        description: ch.description || ""
-      })) : []
+      mainSection: video.mainSection, // Añadir mainSection
+      genres: video.genres, // Añadir genres
+      requiresPlan: video.requiresPlan, // Añadir requiresPlan
+      releaseYear: video.releaseYear, // Añadir releaseYear
+      isFeatured: video.isFeatured, // Añadir isFeatured
+      active: video.active, // Añadir active
+      logo: video.logo, // Añadir logo
+      customThumbnail: video.customThumbnail, // Añadir customThumbnail
+      tmdbThumbnail: video.tmdbThumbnail, // Añadir tmdbThumbnail
+      trailerUrl: video.trailerUrl, // Añadir trailerUrl
+      seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
+          seasonNumber: s.seasonNumber,
+          title: s.title,
+          chapters: (s.chapters || []).map(ch => ({
+              title: ch.title,
+              url: ch.url,
+              thumbnail: ch.thumbnail || "",
+              duration: ch.duration || "0:00",
+              description: ch.description || ""
+          }))
+      })) : [],
     };
     res.json(response);
   } catch (err) { next(err); }
@@ -540,7 +607,8 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "ID de video con formato inválido." });
     }
-    const { title, url, tipo, mainSection, requiresPlan, genres, description, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, chapters } = req.body;
+    // CAMBIO: Recibir 'seasons' en lugar de 'chapters'
+    const { title, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, description, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons } = req.body; 
 
     if (tipo && !Video.schema.path('tipo').enumValues.includes(tipo)) return res.status(400).json({ error: `Tipo de VOD inválido: '${tipo}'.` });
     if (mainSection && !Video.schema.path('mainSection').enumValues.includes(mainSection)) return res.status(400).json({ error: `Sección principal inválida: '${mainSection}'.` });
@@ -557,17 +625,40 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
         }
       }
     }
-    if (tipo === "serie" || (await Video.findById(req.params.id)).tipo === "serie") {
-      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas"];
-      if (req.body.subcategoria && !validSubcategorias.includes(req.body.subcategoria)) {
+    // CAMBIO: Validación de subcategoría para tipos que no sean película
+    if (tipo !== "pelicula") {
+      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"];
+      if (subcategoria && !validSubcategorias.includes(subcategoria)) {
         return res.status(400).json({ 
           error: `Subcategoría inválida para serie. Opciones válidas: ${validSubcategorias.join(', ')}`,
           validSubcategorias
         });
       }
     }
+    // CAMBIO: Validar 'seasons'
+    if (seasons !== undefined && seasons !== null) { // Si 'seasons' se envía, validarlo
+      if (!Array.isArray(seasons)) {
+        return res.status(400).json({ error: "El campo 'seasons' debe ser un array." });
+      }
+      if (tipo !== "pelicula" && seasons.length === 0) {
+        return res.status(400).json({ error: "Temporadas son obligatorias para series/anime/dorama/novela/documental y no pueden estar vacías." });
+      }
+      for (const season of seasons) {
+        if (!season.seasonNumber || typeof season.seasonNumber !== 'number' || season.seasonNumber < 1) {
+          return res.status(400).json({ error: "Todas las temporadas deben tener un número de temporada válido (>= 1)." });
+        }
+        if (!season.chapters || season.chapters.length === 0) {
+          return res.status(400).json({ error: `La Temporada ${season.seasonNumber} debe tener al menos un capítulo.` });
+        }
+        const invalidChapters = season.chapters.filter(ch => !ch.title || !ch.url);
+        if (invalidChapters.length > 0) {
+          return res.status(400).json({ error: `Todos los capítulos en la Temporada ${season.seasonNumber} deben tener título y URL.` });
+        }
+      }
+    }
 
-    // Primero obtenemos el video existente para preservar los capítulos si no se proporcionan nuevos
+
+    // Primero obtenemos el video existente para preservar las temporadas si no se proporcionan nuevas
     const existingVideo = await Video.findById(req.params.id);
     if (!existingVideo) {
       return res.status(404).json({ error: "Video no encontrado para actualizar." });
@@ -577,6 +668,8 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
       title, 
       url, 
       tipo, 
+      subtipo: tipo !== "pelicula" ? (subtipo || tipo) : undefined, // Asegurarse de que subtipo se establezca si no es película
+      subcategoria: tipo !== "pelicula" ? subcategoria : undefined, // Asegurarse de que subcategoria se establezca si no es película
       mainSection, 
       requiresPlan: requiresPlan || [],
       genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : undefined),
@@ -587,15 +680,13 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
       active, 
       logo, 
       customThumbnail,
-      // Mantener los capítulos existentes si no se proporcionan nuevos
-      chapters: Array.isArray(chapters) ? chapters : existingVideo.chapters,
-      subcategoria: tipo === "serie" ? req.body.subcategoria : undefined
+      // CAMBIO: Mantener las temporadas existentes si no se proporcionan nuevas
+      // Si 'seasons' viene en el body, lo usamos; si es undefined/null, mantenemos lo existente
+      seasons: seasons !== undefined ? seasons : existingVideo.seasons, 
     };
 
     // Solo eliminar las propiedades que son explícitamente undefined
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-
-    console.log('Debug - Actualizando video con capítulos:', JSON.stringify(updateData.chapters, null, 2));
 
     const updatedVideo = await Video.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
     if (!updatedVideo) return res.status(404).json({ error: "Video no encontrado para actualizar." });
@@ -606,6 +697,9 @@ router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
     next(error); 
   }
 });
+
+// DELETE /api/videos/batch (Eliminar VODs en lote)
+router.delete("/batch", verifyToken, isAdmin, deleteBatchVideosAdmin);
 
 // DELETE /api/videos/:id
 router.delete("/:id", verifyToken, isAdmin, async (req, res, next) => {
@@ -621,5 +715,6 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res, next) => {
     next(error); 
   }
 });
+
 
 export default router;

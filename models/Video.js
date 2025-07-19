@@ -1,11 +1,32 @@
 // iptv-backend/models/Video.js
 import mongoose from "mongoose";
 
-// Se crea un sub-schema para las entradas de progreso individuales
+// --- NUEVO SUB-SCHEMA PARA CAPÍTULOS DENTRO DE UNA TEMPORADA ---
+const chapterSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true },
+  url: { type: String, required: true, trim: true },
+  thumbnail: { type: String, default: '' },
+  duration: { type: String, default: '0:00' }, // Puedes almacenar la duración si la obtienes
+  description: { type: String, default: '', trim: true }
+}, {_id: false}); // _id: false es buena práctica para subdocumentos si no necesitan IDs propios en MongoDB
+
+// --- NUEVO SUB-SCHEMA PARA TEMPORADAS ---
+const seasonSchema = new mongoose.Schema({
+  seasonNumber: { type: Number, required: true, min: 1 }, // Número de la temporada (ej. 1, 2, 3)
+  title: { type: String, default: '', trim: true }, // Título de la temporada (opcional, ej. "La temporada de la venganza")
+  chapters: { // Array de capítulos dentro de esta temporada
+    type: [chapterSchema],
+    default: []
+  }
+}, {_id: false});
+
+// Se actualiza el sub-schema para las entradas de progreso individuales
 const watchProgressEntrySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  lastChapter: { type: Number, default: 0 },
+  lastSeason: { type: Number, default: 0 }, // Nuevo campo: índice de la última temporada vista
+  lastChapter: { type: Number, default: 0 }, // Índice del último capítulo visto dentro de esa temporada
   lastTime: { type: Number, default: 0 },
+  progress: { type: Number, default: 0 }, // Progreso del capítulo actual (0.0 a 1.0)
   lastWatched: { type: Date, default: Date.now },
   completed: { type: Boolean, default: false }
 }, {_id: false}); // _id: false es una buena práctica para subdocumentos si no necesitas IDs únicos para cada entrada de progreso
@@ -30,41 +51,36 @@ const videoSchema = new mongoose.Schema({
     enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"],
     default: function() { return this.tipo || "serie"; }
   },
- subcategoria: {
-  type: String,
-  required: function() { return this.tipo === "serie"; },
-  enum: [
-    "Netflix", "Prime Video", "Disney", "Apple TV",
-    "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
-  ],
-  default: "Netflix"
-},
-  // --- CAMBIO CLAVE ---
-  // watchProgress ahora es un array que usa el sub-schema definido arriba.
+  subcategoria: {
+    type: String,
+    required: function() { return this.tipo !== "pelicula"; }, // La subcategoría aplica a todo lo que no sea película, ya que ahora 'serie' engloba todo
+    enum: [
+      "Netflix", "Prime Video", "Disney", "Apple TV",
+      "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
+    ],
+    default: "Netflix"
+  },
+  // --- CAMBIO CLAVE: 'chapters' es reemplazado por 'seasons' ---
+  seasons: {
+    type: [seasonSchema],
+    // 'required' si el tipo no es película, ya que las series tienen temporadas
+    required: function() { return this.tipo !== "pelicula"; },
+    default: []
+  },
+  // --- watchProgress actualizado para incluir lastSeason ---
   watchProgress: {
     type: [watchProgressEntrySchema],
     default: [] 
-  },
-  chapters: {
-    type: [{
-      title: { type: String, required: true, trim: true },
-      url: { type: String, required: true, trim: true },
-      thumbnail: { type: String, default: '' },
-      duration: { type: String, default: '0:00' },
-      description: { type: String, default: '', trim: true }
-    }],
-    required: function() { return this.tipo !== "pelicula"; },
-    default: []
   },
   mainSection: {
     type: String,
     trim: true,
     enum: [
-        "POR_GENERO",
-        "ESPECIALES",
-        "CINE_2025",
-        "CINE_4K",
-        "CINE_60FPS"
+      "POR_GENERO",
+      "ESPECIALES",
+      "CINE_2025",
+      "CINE_4K",
+      "CINE_60FPS"
     ],
     default: "POR_GENERO",
   },
@@ -101,6 +117,7 @@ videoSchema.index({ tipo: 1 });
 
 // Este nuevo índice es CRUCIAL para que las búsquedas de "Continuar Viendo" sean rápidas.
 // Ayuda a encontrar videos donde un usuario específico tiene progreso.
+// Se ha adaptado para la nueva estructura de watchProgress con lastSeason
 videoSchema.index({ "watchProgress.userId": 1, "watchProgress.lastWatched": -1 });
 
 // Índices compuestos

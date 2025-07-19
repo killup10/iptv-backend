@@ -60,19 +60,55 @@ export const login = async (req, res, next) => {
 
     const isAdmin = user.role === 'admin';
     if (!isAdmin) {
+      // Limpiar dispositivos obsoletos automáticamente antes de verificar límites
+      await Device.deactivateStale(7);
+      
       const activeDevices = await Device.find({ userId: user._id, isActive: true });
+      const maxDevices = user.maxDevices || 2;
 
-      if (activeDevices.length >= 2 && !activeDevices.some(d => d.deviceId === deviceId)) {
-        return res.status(403).json({ error: "Límite de dispositivos alcanzado. Solo puedes estar conectado en 2 dispositivos." });
+      // Verificar si el dispositivo actual ya está registrado
+      const existingDevice = activeDevices.find(d => d.deviceId === deviceId);
+      
+      if (!existingDevice && activeDevices.length >= maxDevices) {
+        console.log(`Usuario ${username} alcanzó límite de dispositivos: ${activeDevices.length}/${maxDevices}`);
+        return res.status(403).json({ 
+          error: `Límite de dispositivos alcanzado. Solo puedes estar conectado en ${maxDevices} dispositivos.`,
+          activeDevices: activeDevices.length,
+          maxDevices: maxDevices,
+          deviceList: activeDevices.map(d => ({
+            deviceId: d.deviceId,
+            lastSeen: d.lastSeen,
+            deviceType: d.deviceType,
+            browser: d.browser
+          }))
+        });
       }
 
-      await Device.findOneAndUpdate(
-        { userId: user._id, deviceId },
-        { userAgent, ip, lastSeen: new Date(), isActive: true },
-        { upsert: true, new: true }
-      );
+      // Actualizar o crear dispositivo
+      let device = await Device.findOne({ userId: user._id, deviceId });
+      
+      if (device) {
+        // Actualizar dispositivo existente
+        await device.updateInfo(userAgent, ip);
+        device.isActive = true;
+        await device.save();
+        console.log(`Usuario ${username} actualizó dispositivo existente: ${deviceId}`);
+      } else {
+        // Crear nuevo dispositivo
+        device = new Device({
+          userId: user._id,
+          deviceId,
+          userAgent,
+          ip,
+          lastSeen: new Date(),
+          isActive: true
+        });
+        await device.save();
+        console.log(`Usuario ${username} registró nuevo dispositivo: ${deviceId}`);
+      }
     }
 
+    console.log(`Login exitoso para usuario ${username} desde dispositivo ${deviceId}`);
     res.json({
       token,
       user: {
@@ -89,19 +125,80 @@ export const login = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
-    const { deviceId } = req.body;
+    const { deviceId, allDevices = false } = req.body;
     const userId = req.user.id;
+    const username = req.user.username;
 
-    if (!deviceId) {
-      await Device.updateMany({ userId }, { isActive: false });
-      return res.json({ message: "Todas las sesiones han sido cerradas" });
+    if (allDevices || !deviceId) {
+      // Cerrar todas las sesiones del usuario
+      const result = await Device.updateMany({ userId }, { isActive: false });
+      console.log(`Usuario ${username} cerró todas sus sesiones: ${result.modifiedCount} dispositivos desactivados`);
+      return res.json({ 
+        message: "Todas las sesiones han sido cerradas",
+        devicesDeactivated: result.modifiedCount
+      });
     }
 
-    await Device.findOneAndUpdate({ userId, deviceId }, { isActive: false });
+    // Cerrar sesión en dispositivo específico
+    const result = await Device.findOneAndUpdate(
+      { userId, deviceId }, 
+      { isActive: false },
+      { new: true }
+    );
 
-    res.json({ message: "Sesión cerrada exitosamente" });
+    if (!result) {
+      console.log(`Usuario ${username} intentó cerrar sesión en dispositivo inexistente: ${deviceId}`);
+      return res.status(404).json({ error: "Dispositivo no encontrado." });
+    }
+
+    console.log(`Usuario ${username} cerró sesión en dispositivo: ${deviceId}`);
+    res.json({ 
+      message: "Sesión cerrada exitosamente",
+      deviceId: result.deviceId
+    });
   } catch (error) {
     console.error("Error en logout:", error);
     next(error);
+  }
+};
+
+// Nueva función para limpiar dispositivos inactivos automáticamente
+export const cleanupInactiveDevices = async () => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const result = await Device.deleteMany({
+      isActive: false,
+      lastSeen: { $lt: thirtyDaysAgo }
+    });
+
+    console.log(`Limpieza automática: ${result.deletedCount} dispositivos inactivos eliminados`);
+    return result.deletedCount;
+  } catch (error) {
+    console.error("Error en limpieza automática de dispositivos:", error);
+    return 0;
+  }
+};
+
+// Nueva función para forzar logout de dispositivos obsoletos
+export const forceLogoutStaleDevices = async () => {
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const result = await Device.updateMany(
+      {
+        isActive: true,
+        lastSeen: { $lt: sevenDaysAgo }
+      },
+      { isActive: false }
+    );
+
+    console.log(`Logout forzado: ${result.modifiedCount} dispositivos obsoletos desactivados`);
+    return result.modifiedCount;
+  } catch (error) {
+    console.error("Error en logout forzado de dispositivos obsoletos:", error);
+    return 0;
   }
 };
