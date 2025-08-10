@@ -567,3 +567,70 @@ export const deleteBatchVideosAdmin = async (req, res, next) => {
     next(error);
   }
 };
+
+export const updateVideoAdmin = async (req, res, next) => {
+  const { id } = req.params;
+  const updateData = req.body;
+
+  // Log para depuración para ver exactamente qué se recibe
+  console.log(`[updateVideoAdmin] Cuerpo recibido para ID ${id}:`, JSON.stringify(updateData, null, 2));
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "ID de video inválido." });
+  }
+
+  try {
+    const videoToUpdate = await Video.findById(id);
+
+    if (!videoToUpdate) {
+      return res.status(404).json({ error: "Video no encontrado." });
+    }
+
+    // Lista de campos que se pueden actualizar directamente
+    const allowedFields = [
+      'title', 'description', 'releaseYear', 'genres', 'active', 
+      'isFeatured', 'mainSection', 'requiresPlan', 'logo', 
+      'customThumbnail', 'trailerUrl', 'tipo', 'subcategoria'
+    ];
+
+    allowedFields.forEach(field => {
+      // Se comprueba que el campo exista en el body para no sobreescribir con undefined
+      if (Object.prototype.hasOwnProperty.call(updateData, field)) {
+        videoToUpdate[field] = updateData[field];
+      }
+    });
+
+    // Determinar el tipo final del VOD para la lógica condicional
+    const finalTipo = updateData.tipo || videoToUpdate.tipo;
+
+    if (finalTipo !== 'pelicula') {
+      // Es una serie, anime, etc.
+      // Si se envía un array de 'seasons', se actualiza.
+      // Esto permite al frontend gestionar la lista completa de capítulos.
+      if (Array.isArray(updateData.seasons)) {
+        console.log(`[updateVideoAdmin] Actualizando seasons para la serie ${id}.`);
+        videoToUpdate.seasons = updateData.seasons;
+      }
+      // Para series, la URL principal no es relevante, se puede limpiar.
+      videoToUpdate.url = ''; 
+    } else {
+      // Es una película
+      if (updateData.url !== undefined) {
+        videoToUpdate.url = updateData.url;
+      }
+      // Las películas no tienen temporadas.
+      videoToUpdate.seasons = [];
+    }
+    
+    const updatedVideo = await videoToUpdate.save();
+    console.log(`[updateVideoAdmin] Video ${id} actualizado exitosamente.`);
+    res.json(updatedVideo);
+
+  } catch (error) {
+    console.error(`Error actualizando video ${id}:`, error);
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
+    }
+    next(error);
+  }
+};

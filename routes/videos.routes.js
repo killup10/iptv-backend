@@ -5,7 +5,8 @@ import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
-import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin } from "../controllers/videos.controller.js";
+import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
+
 
 
 const router = express.Router();
@@ -601,102 +602,9 @@ router.get("/:id", verifyToken, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PUT /api/videos/:id (Actualizar VOD)
-router.put("/:id", verifyToken, isAdmin, async (req, res, next) => {
-  try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ error: "ID de video con formato inválido." });
-    }
-    // CAMBIO: Recibir 'seasons' en lugar de 'chapters'
-    const { title, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, description, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons } = req.body; 
+// PUT /api/videos/:id (Actualizar VOD) - Ahora usa el controlador dedicado
+router.put("/:id", verifyToken, isAdmin, updateVideoAdmin);
 
-    if (tipo && !Video.schema.path('tipo').enumValues.includes(tipo)) return res.status(400).json({ error: `Tipo de VOD inválido: '${tipo}'.` });
-    if (mainSection && !Video.schema.path('mainSection').enumValues.includes(mainSection)) return res.status(400).json({ error: `Sección principal inválida: '${mainSection}'.` });
-    if (requiresPlan) {
-      const plansToCheck = Array.isArray(requiresPlan) ? requiresPlan : [requiresPlan];
-      const validEnumPlans = Video.schema.path('requiresPlan').caster?.enumValues;
-      if (!validEnumPlans) {
-          console.error("Error de configuración del Schema: EnumValues para 'requiresPlan' no encontrados en el caster. Verifica Video.model.js.");
-          return res.status(500).json({ error: "Error de configuración del servidor al validar planes." });
-      }
-      for (const plan of plansToCheck) {
-        if (plan && !validEnumPlans.includes(plan)) { 
-          return res.status(400).json({ error: `Plan requerido inválido: '${plan}' no es una opción válida. Opciones válidas: ${validEnumPlans.join(', ')}` });
-        }
-      }
-    }
-    // CAMBIO: Validación de subcategoría para tipos que no sean película
-    if (tipo !== "pelicula") {
-      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"];
-      if (subcategoria && !validSubcategorias.includes(subcategoria)) {
-        return res.status(400).json({ 
-          error: `Subcategoría inválida para serie. Opciones válidas: ${validSubcategorias.join(', ')}`,
-          validSubcategorias
-        });
-      }
-    }
-    // CAMBIO: Validar 'seasons'
-    if (seasons !== undefined && seasons !== null) { // Si 'seasons' se envía, validarlo
-      if (!Array.isArray(seasons)) {
-        return res.status(400).json({ error: "El campo 'seasons' debe ser un array." });
-      }
-      if (tipo !== "pelicula" && seasons.length === 0) {
-        return res.status(400).json({ error: "Temporadas son obligatorias para series/anime/dorama/novela/documental y no pueden estar vacías." });
-      }
-      for (const season of seasons) {
-        if (!season.seasonNumber || typeof season.seasonNumber !== 'number' || season.seasonNumber < 1) {
-          return res.status(400).json({ error: "Todas las temporadas deben tener un número de temporada válido (>= 1)." });
-        }
-        if (!season.chapters || season.chapters.length === 0) {
-          return res.status(400).json({ error: `La Temporada ${season.seasonNumber} debe tener al menos un capítulo.` });
-        }
-        const invalidChapters = season.chapters.filter(ch => !ch.title || !ch.url);
-        if (invalidChapters.length > 0) {
-          return res.status(400).json({ error: `Todos los capítulos en la Temporada ${season.seasonNumber} deben tener título y URL.` });
-        }
-      }
-    }
-
-
-    // Primero obtenemos el video existente para preservar las temporadas si no se proporcionan nuevas
-    const existingVideo = await Video.findById(req.params.id);
-    if (!existingVideo) {
-      return res.status(404).json({ error: "Video no encontrado para actualizar." });
-    }
-
-    const updateData = {
-      title, 
-      url, 
-      tipo, 
-      subtipo: tipo !== "pelicula" ? (subtipo || tipo) : undefined, // Asegurarse de que subtipo se establezca si no es película
-      subcategoria: tipo !== "pelicula" ? subcategoria : undefined, // Asegurarse de que subcategoria se establezca si no es película
-      mainSection, 
-      requiresPlan: requiresPlan || [],
-      genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : undefined),
-      description, 
-      trailerUrl, 
-      releaseYear, 
-      isFeatured, 
-      active, 
-      logo, 
-      customThumbnail,
-      // CAMBIO: Mantener las temporadas existentes si no se proporcionan nuevas
-      // Si 'seasons' viene en el body, lo usamos; si es undefined/null, mantenemos lo existente
-      seasons: seasons !== undefined ? seasons : existingVideo.seasons, 
-    };
-
-    // Solo eliminar las propiedades que son explícitamente undefined
-    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
-
-    const updatedVideo = await Video.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
-    if (!updatedVideo) return res.status(404).json({ error: "Video no encontrado para actualizar." });
-
-    res.json({ message: "Video VOD actualizado exitosamente.", video: updatedVideo });
-  } catch (error) {
-    console.error(`Error en PUT /api/videos/${req.params.id}:`, error);
-    next(error); 
-  }
-});
 
 // DELETE /api/videos/batch (Eliminar VODs en lote)
 router.delete("/batch", verifyToken, isAdmin, deleteBatchVideosAdmin);
