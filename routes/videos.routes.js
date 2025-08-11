@@ -564,9 +564,94 @@ router.get("/:id", verifyToken, async (req, res, next) => {
         });
       }
     }
-    if (!canAccess) return res.status(403).json({ error: "Acceso denegado a este video según tu plan." });
     
-    // CAMBIO: Devolver 'seasons' en lugar de 'chapters'
+    if (!canAccess) {
+      // Determinar el plan mínimo requerido para acceder al video
+      const requiredPlans = video.requiresPlan || [];
+      const planNames = {
+        'gplay': 'G-Play',
+        'estandar': 'Estándar', 
+        'sports': 'Sports',
+        'cinefilo': 'Cinéfilo',
+        'premium': 'Premium'
+      };
+      
+      const currentPlanName = planNames[userPlan] || userPlan;
+      const requiredPlanNames = requiredPlans.map(plan => planNames[plan] || plan).join(' o ');
+      
+      // Calcular información de prueba gratuita
+      const User = (await import('../models/User.js')).default;
+      const user = await User.findById(req.user.id);
+      let trialInfo = {};
+      
+      // Determinar si es película para mostrar opción de prueba
+      const isMovie = video.tipo === 'pelicula';
+      
+      if (isMovie && user && user.dailyTrialUsage) {
+        const today = new Date().toDateString();
+        const lastTrialDate = user.dailyTrialUsage.date ? new Date(user.dailyTrialUsage.date).toDateString() : null;
+        
+        if (lastTrialDate === today) {
+          // Ya usó tiempo de prueba hoy
+          const minutesUsed = user.dailyTrialUsage.minutesUsed || 0;
+          const maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
+          const remainingMinutes = Math.max(0, maxMinutes - minutesUsed);
+          
+          if (remainingMinutes > 0) {
+            trialInfo = {
+              trialMessage: `¡Perfecto! Puedes usar tu prueba gratuita diaria para ver esta película. Te quedan ${remainingMinutes} minutos disponibles hoy.`,
+              trialMinutesRemaining: remainingMinutes,
+              trialUsedToday: minutesUsed
+            };
+          } else {
+            trialInfo = {
+              trialMessage: `Ya has usado tus ${maxMinutes} minutos de prueba gratuita hoy. ¡Vuelve mañana para más contenido gratis!`,
+              trialMinutesRemaining: 0,
+              trialUsedToday: minutesUsed
+            };
+          }
+        } else {
+          // Nuevo día, reiniciar prueba
+          const maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
+          trialInfo = {
+            trialMessage: `¡Genial! Tienes ${maxMinutes} minutos de prueba gratuita para disfrutar esta película hoy. ¡Aprovéchalos!`,
+            trialMinutesRemaining: maxMinutes,
+            trialUsedToday: 0
+          };
+        }
+      } else if (isMovie) {
+        // Usuario sin sistema de prueba configurado pero es película
+        trialInfo = {
+          trialMessage: "¡Excelente! Puedes usar tu prueba gratuita diaria de 60 minutos para ver esta película. ¡Disfrútala!",
+          trialMinutesRemaining: 60,
+          trialUsedToday: 0
+        };
+      }
+      
+      // Mensajes personalizados según el tipo de contenido
+      let errorMessage, mainMessage, upgradeMessage;
+      
+      if (isMovie) {
+        errorMessage = `🎬 ¡Esta película es contenido premium!`;
+        mainMessage = `Esta película requiere el plan ${requiredPlanNames}. Tu plan actual (${currentPlanName}) no incluye acceso a este contenido.`;
+        upgradeMessage = trialInfo.trialMinutesRemaining > 0 
+          ? "¡Pero puedes usar tu prueba gratuita diaria para verla ahora mismo! O actualiza tu plan para acceso ilimitado."
+          : "Actualiza tu plan para disfrutar de todas nuestras películas premium sin límites.";
+      } else {
+        errorMessage = `📺 ¡Este contenido es premium!`;
+        mainMessage = `Este ${video.tipo} requiere el plan ${requiredPlanNames}. Tu plan actual (${currentPlanName}) no incluye acceso a este contenido.`;
+        upgradeMessage = "Actualiza tu plan para acceder a todo nuestro catálogo premium de series, animes y documentales.";
+      }
+      
+      return res.status(403).json({
+        error: errorMessage,
+        message: mainMessage,
+        currentPlan: currentPlanName,
+        requiredPlans: requiredPlanNames,
+        upgradeMessage: upgradeMessage,
+        ...trialInfo
+      });
+    }
     const response = {
       id: video._id,
       name: video.title,

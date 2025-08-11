@@ -27,11 +27,19 @@ const userSchema = new mongoose.Schema({
     default: 2, // Por defecto, cada usuario podrá tener 2 dispositivos.
     min: 1      // Como mínimo, 1 dispositivo.
   },
+  // Sistema de prueba gratuita diaria
+  dailyTrialUsage: {
+    date: { type: Date, default: null },
+    minutesUsed: { type: Number, default: 0 },
+    maxMinutesPerDay: { type: Number, default: 60 } // 1 hora por día
+  },
   role: { type: String, enum: ["admin", "user"], default: "user" },
   plan: {
     type: String,
-    enum: ['basico', 'estandar', 'premium', 'cinefilo', 'sports'],
-    default: 'basico'
+    // CORRECCIÓN: Se alinea el plan base a 'gplay' para que coincida con la lógica de acceso y el modelo de Video.
+    // El plan 'basico' no existía en la jerarquía de planes, impidiendo el acceso a todo el contenido.
+    enum: ['gplay', 'estandar', 'premium', 'cinefilo', 'sports'],
+    default: 'gplay'
   }
 }, {
   timestamps: true

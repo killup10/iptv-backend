@@ -41,22 +41,74 @@ export const verifyToken = async (req, res, next) => {
       return res.status(403).json({ error: "Tu suscripción ha expirado." });
     }
 
-    // Validación de dispositivo para usuarios que no son admin
+    // Validación de dispositivo para usuarios que no son admin - MODO PERMISIVO
     if (user.role !== 'admin') {
       const deviceId = req.headers['x-device-id'];
       if (!deviceId) {
-        return res.status(400).json({ error: "Falta el header 'x-device-id'." });
+        console.warn(`verifyToken: Falta x-device-id para ${user.username}, pero continuando...`);
+        // En lugar de fallar, generar un deviceId temporal
+        const tempDeviceId = `temp_${user._id}_${Date.now()}`;
+        req.headers['x-device-id'] = tempDeviceId;
       }
 
-      const device = await Device.findOne({ userId: user._id, deviceId, isActive: true });
-      if (!device) {
-        return res.status(403).json({ error: "Este dispositivo no está autorizado o fue desactivado." });
-      }
+      try {
+        const finalDeviceId = req.headers['x-device-id'];
+        
+        // Buscar dispositivo existente
+        let device = await Device.findOne({ userId: user._id, deviceId: finalDeviceId });
+        
+        if (!device) {
+          // Verificar límite de dispositivos del usuario de manera más permisiva
+          const activeDevicesCount = await Device.countDocuments({ 
+            userId: user._id, 
+            isActive: true 
+          });
+          
+          const maxDevices = user.maxDevices || 5; // Valor por defecto más generoso
+          
+          if (activeDevicesCount >= maxDevices) {
+            console.warn(`verifyToken: Usuario ${user.username} ha alcanzado el límite de dispositivos (${activeDevicesCount}/${maxDevices}), pero permitiendo acceso...`);
+            // En lugar de fallar, desactivar el dispositivo más antiguo
+            const oldestDevice = await Device.findOne({ 
+              userId: user._id, 
+              isActive: true 
+            }).sort({ lastSeen: 1 });
+            
+            if (oldestDevice) {
+              oldestDevice.isActive = false;
+              await oldestDevice.save();
+              console.log(`verifyToken: Dispositivo más antiguo desactivado: ${oldestDevice.deviceId}`);
+            }
+          }
 
-      device.lastSeen = new Date();
-      await device.save();
+          // Crear nuevo dispositivo automáticamente
+          device = new Device({
+            userId: user._id,
+            deviceId: finalDeviceId,
+            userAgent: req.headers['user-agent'] || 'Unknown',
+            ip: req.ip || req.connection.remoteAddress || '127.0.0.1',
+            isActive: true,
+            lastSeen: new Date()
+          });
+          
+          await device.save();
+          console.log(`verifyToken: Nuevo dispositivo registrado automáticamente para ${user.username}: ${finalDeviceId}`);
+        } else if (!device.isActive) {
+          // Si el dispositivo existe pero está inactivo, reactivarlo
+          device.isActive = true;
+          device.lastSeen = new Date();
+          await device.save();
+          console.log(`verifyToken: Dispositivo reactivado para ${user.username}: ${finalDeviceId}`);
+        } else {
+          // Si el dispositivo existe y está activo, solo actualizar lastSeen
+          device.lastSeen = new Date();
+          await device.save();
+        }
+      } catch (deviceError) {
+        console.error(`verifyToken: Error manejando dispositivo para ${user.username}:`, deviceError);
+        // No fallar por errores de dispositivo - continuar con la autenticación
+      }
     }
-
 
     req.user = user; // Adjuntar el usuario a la request
     console.log(`verifyToken: Verificación exitosa para ${user.username}. Llamando a next().`);

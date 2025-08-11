@@ -56,7 +56,7 @@ export const login = async (req, res, next) => {
     if (!isMatch) return res.status(401).json({ error: "Credenciales inválidas." });
 
     const payload = { id: user._id, role: user.role, username: user.username, plan: user.plan };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "30d" }); // 30 días de duración
 
     const isAdmin = user.role === 'admin';
     if (!isAdmin) {

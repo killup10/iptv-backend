@@ -136,8 +136,26 @@ export const getChannelByIdForUser = async (req, res, next) => {
 
     if (!canAccess) {
       console.log(`CTRL: getChannelByIdForUser - Acceso DENEGADO para ${req.user?.username} (plan token: ${userPlanFromToken}, nivel: ${userLevel}) al canal ${channel.name} (req: ${channel.requiresPlan?.join(', ')})`);
+      
+      // Determinar el plan mínimo requerido para acceder al canal
+      const requiredPlans = channel.requiresPlan || [];
+      const planNames = {
+        'gplay': 'G-Play',
+        'estandar': 'Estándar', 
+        'sports': 'Sports',
+        'cinefilo': 'Cinéfilo',
+        'premium': 'Premium'
+      };
+      
+      const currentPlanName = planNames[normalizedUserPlanKey] || normalizedUserPlanKey;
+      const requiredPlanNames = requiredPlans.map(plan => planNames[plan] || plan).join(' o ');
+      
       return res.status(403).json({
-        error: `Acceso denegado. Tu plan actual no permite acceder a este canal.`
+        error: `📺 ¡Este canal es contenido premium!`,
+        message: `Este canal requiere el plan ${requiredPlanNames}. Tu plan actual (${currentPlanName}) no incluye acceso a este contenido.`,
+        currentPlan: currentPlanName,
+        requiredPlans: requiredPlanNames,
+        upgradeMessage: "Actualiza tu plan para acceder a todos nuestros canales premium de televisión en vivo."
       });
     }
 
