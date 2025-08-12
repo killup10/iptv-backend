@@ -270,11 +270,25 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
               user.dailyTrialUsage.date = today;
               user.dailyTrialUsage.minutesUsed = 0;
             }
+            // Asegurar objeto de prueba y normalizar día actual
+            if (!user.dailyTrialUsage) {
+              user.dailyTrialUsage = {
+                date: today,
+                minutesUsed: 0,
+                maxMinutesPerDay: 60
+              };
+            } else if (!user.dailyTrialUsage.date || user.dailyTrialUsage.date < today) {
+              user.dailyTrialUsage.date = today;
+              user.dailyTrialUsage.minutesUsed = 0;
+            }
             const maxPerDay = user.dailyTrialUsage.maxMinutesPerDay || 60;
             const usedSoFar = user.dailyTrialUsage.minutesUsed || 0;
             const newUsed = Math.min(maxPerDay, usedSoFar + deltaMinutes);
             user.dailyTrialUsage.minutesUsed = newUsed;
             await user.save();
+            try {
+              console.log(`[TRIAL] User ${user.username || user._id}: +${deltaMinutes.toFixed(2)} min, used=${newUsed.toFixed(2)}/${maxPerDay}, video=${video._id}`);
+            } catch {}
           }
         }
       }
@@ -704,46 +718,53 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       // Determinar si es película para mostrar opción de prueba
       const isMovie = video.tipo === 'pelicula';
       
-      if (isMovie && user && user.dailyTrialUsage) {
-        const today = new Date().toDateString();
-        const lastTrialDate = user.dailyTrialUsage.date ? new Date(user.dailyTrialUsage.date).toDateString() : null;
-        
-        if (lastTrialDate === today) {
-          // Ya usó tiempo de prueba hoy
-          const minutesUsed = user.dailyTrialUsage.minutesUsed || 0;
-          const maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
-          const remainingMinutes = Math.max(0, maxMinutes - minutesUsed);
-          
-          if (remainingMinutes > 0) {
-            trialInfo = {
-              trialMessage: `¡Perfecto! Puedes usar tu prueba gratuita diaria para ver esta película. Te quedan ${remainingMinutes} minutos disponibles hoy.`,
-              trialMinutesRemaining: remainingMinutes,
-              trialUsedToday: minutesUsed
-            };
-          } else {
-            trialInfo = {
-              trialMessage: `Ya has usado tus ${maxMinutes} minutos de prueba gratuita hoy. ¡Vuelve mañana para más contenido gratis!`,
-              trialMinutesRemaining: 0,
-              trialUsedToday: minutesUsed
-            };
-          }
-        } else {
-          // Nuevo día, reiniciar prueba
-          const maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
+      if (isMovie && user) {
+        // Asegurar que el usuario tenga el objeto de prueba inicializado y normalizado al día
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (!user.dailyTrialUsage) {
+          user.dailyTrialUsage = {
+            date: today,
+            minutesUsed: 0,
+            maxMinutesPerDay: 60
+          };
+          await user.save();
+        } else if (!user.dailyTrialUsage.date || user.dailyTrialUsage.date < today) {
+          user.dailyTrialUsage.date = today;
+          user.dailyTrialUsage.minutesUsed = 0;
+          await user.save();
+        }
+
+        const maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
+        const minutesUsed = user.dailyTrialUsage.minutesUsed || 0;
+        const remainingMinutes = Math.max(0, maxMinutes - minutesUsed);
+
+        if (remainingMinutes > 0) {
           trialInfo = {
-            trialMessage: `¡Genial! Tienes ${maxMinutes} minutos de prueba gratuita para disfrutar esta película hoy. ¡Aprovéchalos!`,
-            trialMinutesRemaining: maxMinutes,
-            trialUsedToday: 0
+            trialMessage: `¡Perfecto! Puedes usar tu prueba gratuita diaria para ver esta película. Te quedan ${remainingMinutes} minutos disponibles hoy.`,
+            trialMinutesRemaining: remainingMinutes,
+            trialUsedToday: minutesUsed
+          };
+        } else {
+          trialInfo = {
+            trialMessage: `Ya has usado tus ${maxMinutes} minutos de prueba gratuita hoy. ¡Vuelve mañana para más contenido gratis!`,
+            trialMinutesRemaining: 0,
+            trialUsedToday: minutesUsed
           };
         }
       } else if (isMovie) {
-        // Usuario sin sistema de prueba configurado pero es película
+        // Usuario sin documento (caso excepcional), usar fallback
         trialInfo = {
           trialMessage: "¡Excelente! Puedes usar tu prueba gratuita diaria de 60 minutos para ver esta película. ¡Disfrútala!",
           trialMinutesRemaining: 60,
           trialUsedToday: 0
         };
       }
+      try {
+        const used = user?.dailyTrialUsage?.minutesUsed ?? 0;
+        const max = user?.dailyTrialUsage?.maxMinutesPerDay ?? 60;
+        console.log(`[TRIAL] GET /api/videos/:id → user=${user?.username || user?._id} used=${used} / ${max} min, remaining=${trialInfo.trialMinutesRemaining}`);
+      } catch {}
       
       // Mensajes personalizados según el tipo de contenido
       let errorMessage, mainMessage, upgradeMessage;
