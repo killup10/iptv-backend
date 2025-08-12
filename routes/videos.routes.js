@@ -555,8 +555,11 @@ router.get("/:id", verifyToken, async (req, res, next) => {
     } else if (video.active) {
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
       const userPlanLevel = planHierarchy[userPlan] || 0;
+      // --- CORRECCIÓN: Contenido sin plan asignado se bloquea por defecto ---
       if (!video.requiresPlan || video.requiresPlan.length === 0) {
-        canAccess = true;
+        // Si un video no tiene un plan asignado, se bloquea por defecto para usuarios normales.
+        // Para que sea visible, debe tener asignado al menos el plan 'gplay'.
+        canAccess = false; 
       } else {
         canAccess = video.requiresPlan.some(requiredPlanKey => {
             const requiredPlanLevel = planHierarchy[requiredPlanKey] || 0;
@@ -566,6 +569,62 @@ router.get("/:id", verifyToken, async (req, res, next) => {
     }
     
     if (!canAccess) {
+      // Permitir acceso bajo "prueba gratuita" cuando el cliente lo solicita explícitamente (?useTrial=true)
+      // Aplica solo para películas y si el usuario aún tiene minutos de prueba disponibles hoy.
+      const isMovieForTrial = video.tipo === 'pelicula';
+      if (req.query.useTrial === 'true' && isMovieForTrial) {
+        try {
+          const User = (await import('../models/User.js')).default;
+          const user = await User.findById(req.user.id);
+          // Normalizar estado de prueba al día actual si corresponde
+          if (user && user.dailyTrialUsage) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (!user.dailyTrialUsage.date || user.dailyTrialUsage.date < today) {
+              user.dailyTrialUsage.date = today;
+              user.dailyTrialUsage.minutesUsed = 0;
+              await user.save();
+            }
+          }
+        } catch (e) {
+          console.warn('Advertencia al normalizar prueba gratuita:', e?.message || e);
+        }
+
+        // Conceder acceso bajo prueba gratuita sin devolver 403
+        const response = {
+          id: video._id,
+          name: video.title,
+          title: video.title,
+          url: video.url || "",
+          description: video.description || "",
+          tipo: video.tipo,
+          subtipo: video.subtipo,
+          subcategoria: video.subcategoria,
+          mainSection: video.mainSection,
+          genres: video.genres,
+          requiresPlan: video.requiresPlan,
+          releaseYear: video.releaseYear,
+          isFeatured: video.isFeatured,
+          active: video.active,
+          logo: video.logo,
+          customThumbnail: video.customThumbnail,
+          tmdbThumbnail: video.tmdbThumbnail,
+          trailerUrl: video.trailerUrl,
+          seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
+            seasonNumber: s.seasonNumber,
+            title: s.title,
+            chapters: (s.chapters || []).map(ch => ({
+              title: ch.title,
+              url: ch.url,
+              thumbnail: ch.thumbnail || "",
+              duration: ch.duration || "0:00",
+              description: ch.description || ""
+            }))
+          })) : [],
+          trialAccess: true
+        };
+        return res.json(response);
+      }
       // Determinar el plan mínimo requerido para acceder al video
       const requiredPlans = video.requiresPlan || [];
       const planNames = {

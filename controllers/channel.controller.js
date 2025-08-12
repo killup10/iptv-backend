@@ -115,12 +115,11 @@ export const getChannelByIdForUser = async (req, res, next) => {
 
     if (userRole === 'admin') {
       canAccess = true;
+    // --- CORRECCIÓN: Contenido sin plan asignado se bloquea por defecto ---
     } else if (!channel.requiresPlan || channel.requiresPlan.length === 0) {
-      // Si el canal no tiene planes requeridos definidos, es accesible si el usuario tiene al menos el plan más básico (gplay)
-      if (userLevel >= planHierarchy['gplay']) {
-        canAccess = true;
-        console.log(`CTRL: getChannelByIdForUser - Acceso PERMITIDO (canal sin plan explícito, usuario con plan ${normalizedUserPlanKey} nivel ${userLevel})`);
-      }
+      // Si un canal no tiene plan, se bloquea por defecto.
+      // Para que sea público, debe tener asignado explícitamente el plan 'gplay'.
+      canAccess = false;
     } else {
       // El canal tiene planes requeridos. El usuario necesita tener un plan cuyo nivel sea IGUAL O SUPERIOR
       // a CUALQUIERA de los planes requeridos por el canal.
