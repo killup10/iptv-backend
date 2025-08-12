@@ -214,6 +214,7 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
 
     const progressIndex = video.watchProgress.findIndex(p => p.userId.toString() === userId);
     let userProgressEntry;
+    const prevLastTime = progressIndex > -1 ? (video.watchProgress[progressIndex].lastTime || 0) : 0;
 
     if (progressIndex > -1) {
       // Actualiza la entrada existente
@@ -240,6 +241,45 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
       };
       video.watchProgress.push(newProgress);
       userProgressEntry = newProgress;
+    }
+
+    // CAMBIO: Registrar consumo de minutos de prueba si aplica (películas premium sin plan suficiente)
+    try {
+      // Reutilizar la misma lógica de planes que en GET
+      const userPlan = req.user.plan || 'gplay';
+      const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
+      const userPlanLevel = planHierarchy[userPlan] || 0;
+      const requires = video.requiresPlan || [];
+      let hasDirectAccess = false;
+      if (requires.length > 0) {
+        hasDirectAccess = requires.some(r => (planHierarchy[r] || 0) <= userPlanLevel);
+      }
+      const isMovie = video.tipo === 'pelicula';
+
+      if (isMovie && !hasDirectAccess) {
+        const deltaSeconds = Math.max(0, (lastTime || 0) - prevLastTime);
+        if (deltaSeconds > 0) {
+          const deltaMinutes = deltaSeconds / 60; // mantener precisión decimal
+          const User = (await import('../models/User.js')).default;
+          const user = await User.findById(userId);
+          if (user) {
+            // Normalizar día
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (!user.dailyTrialUsage.date || user.dailyTrialUsage.date < today) {
+              user.dailyTrialUsage.date = today;
+              user.dailyTrialUsage.minutesUsed = 0;
+            }
+            const maxPerDay = user.dailyTrialUsage.maxMinutesPerDay || 60;
+            const usedSoFar = user.dailyTrialUsage.minutesUsed || 0;
+            const newUsed = Math.min(maxPerDay, usedSoFar + deltaMinutes);
+            user.dailyTrialUsage.minutesUsed = newUsed;
+            await user.save();
+          }
+        }
+      }
+    } catch (tErr) {
+      console.warn('Advertencia al registrar consumo de prueba:', tErr?.message || tErr);
     }
 
     await video.save();
@@ -573,11 +613,13 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       // Aplica solo para películas y si el usuario aún tiene minutos de prueba disponibles hoy.
       const isMovieForTrial = video.tipo === 'pelicula';
       if (req.query.useTrial === 'true' && isMovieForTrial) {
+        let minutesRemaining = 0;
+        let maxMinutes = 60;
         try {
           const User = (await import('../models/User.js')).default;
           const user = await User.findById(req.user.id);
-          // Normalizar estado de prueba al día actual si corresponde
-          if (user && user.dailyTrialUsage) {
+          if (user) {
+            // Normalizar día
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             if (!user.dailyTrialUsage.date || user.dailyTrialUsage.date < today) {
@@ -585,12 +627,28 @@ router.get("/:id", verifyToken, async (req, res, next) => {
               user.dailyTrialUsage.minutesUsed = 0;
               await user.save();
             }
+            maxMinutes = user.dailyTrialUsage.maxMinutesPerDay || 60;
+            const used = user.dailyTrialUsage.minutesUsed || 0;
+            minutesRemaining = Math.max(0, maxMinutes - used);
           }
         } catch (e) {
-          console.warn('Advertencia al normalizar prueba gratuita:', e?.message || e);
+          console.warn('Advertencia al evaluar prueba gratuita:', e?.message || e);
         }
 
-        // Conceder acceso bajo prueba gratuita sin devolver 403
+        if (minutesRemaining <= 0) {
+          // Sin minutos disponibles: bloquear uso de prueba
+          return res.status(403).json({
+            error: "⏱️ Prueba gratuita agotada",
+            message: `Ya has usado tus ${maxMinutes} minutos de prueba gratuita hoy. ¡Vuelve mañana para más contenido gratis!`,
+            currentPlan: req.user.plan,
+            requiredPlans: (video.requiresPlan || []).join(' o '),
+            trialMessage: `Tu prueba gratuita diaria de ${maxMinutes} minutos ya fue consumida hoy.`,
+            trialMinutesRemaining: 0,
+            trialUsedToday: maxMinutes
+          });
+        }
+
+        // Conceder acceso bajo prueba gratuita
         const response = {
           id: video._id,
           name: video.title,
