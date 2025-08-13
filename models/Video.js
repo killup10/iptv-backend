@@ -53,12 +53,24 @@ const videoSchema = new mongoose.Schema({
   },
   subcategoria: {
     type: String,
-    required: function() { return this.tipo !== "pelicula"; }, // La subcategoría aplica a todo lo que no sea película, ya que ahora 'serie' engloba todo
+    required: function() { 
+      // La subcategoría NO es requerida para películas ni animes
+      if (this.tipo === "pelicula" || this.tipo === "anime") return false;
+      // Tampoco es requerida para series con subtipo anime
+      if (this.tipo === "serie" && this.subtipo === "anime") return false;
+      // Para el resto (series normales, doramas, novelas, documentales) sí es requerida
+      return true;
+    },
     enum: [
       "Netflix", "Prime Video", "Disney", "Apple TV",
       "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
     ],
-    default: "Netflix"
+    default: function() {
+      // No asignar default para animes
+      if (this.tipo === "anime") return undefined;
+      if (this.tipo === "serie" && this.subtipo === "anime") return undefined;
+      return "Netflix";
+    }
   },
   // --- CAMBIO CLAVE: 'chapters' es reemplazado por 'seasons' ---
   seasons: {

@@ -36,17 +36,30 @@ export const uploadM3U = async (req, res) => {
         continue;
       }
 
+      // Determinar el tipo correcto basado en la subcategoría
+      let tipoFinal = section;
+      let subtipoFinal = section;
+      
+      if (section === "serie" && subcategoria) {
+        // Si la subcategoría es "anime", cambiar el tipo a "anime"
+        if (subcategoria.toLowerCase() === "anime") {
+          tipoFinal = "anime";
+          subtipoFinal = "anime";
+        }
+      }
+
       const newVideo = new Video({
         title: entry.title,
         url: entry.url,
-        tipo: section,
-        subtipo: section === "serie" ? "serie" : undefined,
-        subcategoria: section === "serie" ? subcategoria : undefined,
+        tipo: tipoFinal,
+        subtipo: section !== "pelicula" ? subtipoFinal : undefined,
+        // CAMBIO: No asignar subcategoría a animes
+        subcategoria: (section !== "pelicula" && tipoFinal !== "anime") ? subcategoria : undefined,
         description: "Importado desde archivo M3U",
         logo: "",
         isFeatured: false,
         active: true,
-        chapters: section !== "pelicula" ? [] : undefined
+        seasons: section !== "pelicula" ? [] : undefined
       });
       await newVideo.save();
       added++;

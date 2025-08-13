@@ -18,8 +18,20 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// CORS configurado explícitamente para permitir PUT con application/json y headers usados por el frontend
+const corsOptions = {
+  origin: true, // refleja el origen
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id'],
+  credentials: false,
+  maxAge: 86400
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
+// Responder preflight para todas las rutas
+app.options('*', cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -1,3 +1,4 @@
+// killup10/iptv-backend/iptv-backend-103b293ee910f99c02b8b8655c6b8fcaa32c7440/routes/videos.routes.js
 import express from "express";
 import multer from "multer";
 import mongoose from "mongoose";
@@ -58,9 +59,9 @@ router.get("/public/featured-movies", async (req, res, next) => {
 
 router.get("/public/featured-series", async (req, res, next) => {
   try {
-    // CAMBIO: Asegurarse de que el 'tipo' es 'serie', 'anime', 'dorama', 'novela', 'documental'
+    // CORRECCIÓN: Busca series que no sean animes.
     const criteria = { 
-      tipo: { $in: ["serie", "anime", "dorama", "novela", "documental"] }, 
+      tipo: { $in: ["serie", "dorama", "novela", "documental"] }, 
       isFeatured: true, 
       active: true 
     };
@@ -86,7 +87,7 @@ router.get("/public/featured-series", async (req, res, next) => {
 
 router.get("/public/featured-animes", async (req, res, next) => {
   try {
-    // CAMBIO: Asegurarse de que el 'tipo' es 'anime' o 'serie' con subtipo 'anime'
+    // CORRECCIÓN: Unifica la búsqueda de animes, sin importar si su tipo es 'anime' o 'serie' con subtipo 'anime'.
     const criteria = { 
       $or: [{ tipo: "anime" }, { tipo: "serie", subtipo: "anime" }], 
       isFeatured: true, 
@@ -108,6 +109,168 @@ router.get("/public/featured-animes", async (req, res, next) => {
     res.json(animes.map(mapVODToPublicFormat));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-animes:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-doramas", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "dorama", 
+      isFeatured: true, 
+      active: true 
+    };
+    const doramas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(doramas.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-doramas:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-novelas", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "novela", 
+      isFeatured: true, 
+      active: true 
+    };
+    const novelas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(novelas.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-novelas:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-documentales", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "documental", 
+      isFeatured: true, 
+      active: true 
+    };
+    const documentales = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(documentales.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-documentales:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-doramas", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "dorama", 
+      isFeatured: true, 
+      active: true 
+    };
+    const doramas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(doramas.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-doramas:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-novelas", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "novela", 
+      isFeatured: true, 
+      active: true 
+    };
+    const novelas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(novelas.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-novelas:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/featured-documentales", async (req, res, next) => {
+  try {
+    const criteria = { 
+      tipo: "documental", 
+      isFeatured: true, 
+      active: true 
+    };
+    const documentales = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const mapVODToPublicFormat = (v) => ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+      trailerUrl: v.trailerUrl || ""
+    });
+    res.json(documentales.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/featured-documentales:", error.message);
     next(error);
   }
 });

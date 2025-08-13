@@ -603,6 +603,11 @@ export const updateVideoAdmin = async (req, res, next) => {
     // Determinar el tipo final del VOD para la lógica condicional
     const finalTipo = updateData.tipo || videoToUpdate.tipo;
 
+    // Si el tipo final es anime o serie con subtipo anime, limpiar la subcategoría para evitar confusión
+    if (finalTipo === 'anime' || (finalTipo === 'serie' && (updateData.subtipo === 'anime' || videoToUpdate.subtipo === 'anime'))) {
+      videoToUpdate.subcategoria = undefined;
+    }
+
     if (finalTipo !== 'pelicula') {
       // Es una serie, anime, etc.
       // Si se envía un array de 'seasons', se actualiza.
