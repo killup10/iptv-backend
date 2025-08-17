@@ -93,7 +93,8 @@ export const getChannelByIdForUser = async (req, res, next) => {
       return res.status(404).json({ error: "Canal no encontrado" });
     }
 
-    console.log(`CTRL: getChannelByIdForUser - Canal encontrado: ${channel.name}, Planes Requeridos por Canal: ${channel.requiresPlan?.join(', ')}`);
+  console.log(`CTRL: getChannelByIdForUser - Canal encontrado: ${channel.name}, Planes Requeridos por Canal: ${channel.requiresPlan?.join(', ')}`);
+  console.log(`CTRL: getChannelByIdForUser - URL presente? ${!!channel.url} ${channel.url ? `(length=${channel.url.length})` : ''}`);
 
     if (!channel.active && userRole !== "admin") {
       return res.status(403).json({ error: "Este canal no está activo." });
@@ -115,15 +116,16 @@ export const getChannelByIdForUser = async (req, res, next) => {
 
     if (userRole === 'admin') {
       canAccess = true;
-    // --- CORRECCIÓN: Contenido sin plan asignado se bloquea por defecto ---
-    } else if (!channel.requiresPlan || channel.requiresPlan.length === 0) {
-      // Si un canal no tiene plan, se bloquea por defecto.
-      // Para que sea público, debe tener asignado explícitamente el plan 'gplay'.
-      canAccess = false;
     } else {
+      // Normalizar plans: si el canal no tiene requiresPlan definido o está vacío,
+      // asumimos el plan básico 'gplay' (esto evita que canales nuevos sin campo queden bloqueados).
+      const channelRequiredPlans = (Array.isArray(channel.requiresPlan) && channel.requiresPlan.length > 0)
+        ? channel.requiresPlan
+        : ['gplay'];
+
       // El canal tiene planes requeridos. El usuario necesita tener un plan cuyo nivel sea IGUAL O SUPERIOR
       // a CUALQUIERA de los planes requeridos por el canal.
-      canAccess = channel.requiresPlan.some(reqPlanKey => {
+      canAccess = channelRequiredPlans.some(reqPlanKey => {
         const requiredLevel = planHierarchy[reqPlanKey];
         if (requiredLevel === undefined) { // Plan desconocido en el canal, tratar como muy restrictivo o loguear error
           console.warn(`CTRL: getChannelByIdForUser - Plan desconocido '${reqPlanKey}' en los requisitos del canal ${channel.name}`);

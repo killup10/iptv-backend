@@ -436,8 +436,8 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             }
             
             if (!existingVideo) {
-                if (!vodData.logo && !vodData.customThumbnail && vodData.title) {
-                    vodData.tmdbThumbnail = await getTMDBThumbnail(vodData.title);
+                if (vodData.title) {
+                    vodData.thumbnail = await getTMDBThumbnail(vodData.title);
                 }
                 const newVideo = new Video(vodData);
                 await newVideo.save();

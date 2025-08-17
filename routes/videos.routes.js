@@ -545,7 +545,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "", 
+      thumbnail: v.thumbnail || "", 
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
       description: v.description || "", trailerUrl: v.trailerUrl || "", 
       tipo: v.tipo,

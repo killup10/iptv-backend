@@ -24,7 +24,7 @@ export default async function getTMDBThumbnail(title) {
 
       if (validItem) {
         const path = validItem.poster_path || validItem.backdrop_path;
-        return `https://image.tmdb.org/t/p/w500${path}`;
+        return `https://image.tmdb.org/t/p/w780${path}`;
       }
     }
   } catch (err) {

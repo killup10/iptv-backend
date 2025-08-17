@@ -12,6 +12,8 @@ import m3uRoutes from './routes/m3u.routes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import vodManagementRoutes from './routes/vodManagement.routes.js';
 import migrationRoutes from './routes/migration.routes.js';
+import progressRoutes from './routes/progress.routes.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +50,8 @@ app.use('/api/m3u', m3uRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/manage-vod', vodManagementRoutes);
 app.use('/api/admin', migrationRoutes);
+app.use('/api/progress', progressRoutes);
+
 
 // Manejador de errores global
 app.use((err, req, res, next) => {

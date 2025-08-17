@@ -109,6 +109,7 @@ const videoSchema = new mongoose.Schema({
   isFeatured: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
 
+  thumbnail: { type: String, default: '' },
   logo: { type: String, default: '' },
   customThumbnail: { type: String, default: '' },
   tmdbThumbnail: { type: String, default: '' },
