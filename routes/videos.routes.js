@@ -4,6 +4,7 @@ import multer from "multer";
 import mongoose from "mongoose";
 import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
+import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
@@ -47,7 +48,8 @@ router.get("/public/featured-movies", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
       trailerUrl: v.trailerUrl || ""
     });
     res.json(movies.map(mapVODToPublicFormat));
@@ -75,7 +77,8 @@ router.get("/public/featured-series", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
       trailerUrl: v.trailerUrl || ""
     });
     res.json(series.map(mapVODToPublicFormat));
@@ -103,7 +106,8 @@ router.get("/public/featured-animes", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
       trailerUrl: v.trailerUrl || ""
     });
     res.json(animes.map(mapVODToPublicFormat));
@@ -352,6 +356,7 @@ router.get("/:id/progress", verifyToken, async (req, res, next) => {
 // Guarda/Actualiza el progreso de un video específico para el usuario actual
 router.put("/:id/progress", verifyToken, async (req, res, next) => {
   try {
+  try { console.log(`[PUT /api/videos/:id/progress] user=${req.user?.id} video=${req.params.id} body=`, JSON.stringify(req.body)); } catch(e) {}
     const videoId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(videoId)) {
       return res.status(400).json({ error: "ID de video con formato inválido." });
@@ -461,7 +466,31 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
 
     await video.save();
 
-    res.json({ message: "Progreso actualizado.", watchProgress: userProgressEntry });
+    // --- SINCRONIZAR con colección UserProgress (por-usuario) para que "Continuar viendo" lo detecte ---
+    try {
+      const updateFields = {
+        lastTime: userProgressEntry.lastTime || 0,
+        lastSeason: userProgressEntry.lastSeason || 0,
+        lastChapter: userProgressEntry.lastChapter || 0,
+        completed: !!userProgressEntry.completed,
+        lastWatched: userProgressEntry.lastWatched || new Date(),
+        // Mantener compatibilidad: `progress` almacena segundos como antes
+        progress: (userProgressEntry.progress !== undefined && userProgressEntry.progress !== null)
+                  ? userProgressEntry.progress
+                  : (typeof userProgressEntry.lastTime === 'number' ? userProgressEntry.lastTime : 0)
+      };
+
+      const userProgressDoc = await UserProgress.findOneAndUpdate(
+        { user: userId, video: video._id },
+        { $set: updateFields, $setOnInsert: { user: userId, video: video._id } },
+        { upsert: true, new: true }
+      ).lean();
+
+      return res.json({ message: "Progreso actualizado.", watchProgress: userProgressEntry, userProgress: userProgressDoc });
+    } catch (uErr) {
+      console.warn('Advertencia al sincronizar UserProgress:', uErr?.message || uErr);
+      return res.json({ message: "Progreso actualizado (video).", watchProgress: userProgressEntry });
+    }
   } catch (error) {
     console.error(`Error en PUT /:id/progress para user ${req.user?.id}:`, error);
     next(error);
@@ -545,7 +574,8 @@ router.get("/", verifyToken, async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-      thumbnail: v.thumbnail || "", 
+  thumbnail: v.thumbnail || "", 
+  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
       description: v.description || "", trailerUrl: v.trailerUrl || "", 
       tipo: v.tipo,
@@ -554,7 +584,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       requiresPlan: v.requiresPlan 
     });
     
-    const mapToFullAdminFormat = (v) => {
+  const mapToFullAdminFormat = (v) => {
       // CAMBIO: Mapear 'seasons' en lugar de 'chapters'
       return { 
         id: v._id, _id: v._id, title: v.title, name: v.title, 
@@ -562,7 +592,9 @@ router.get("/", verifyToken, async (req, res, next) => {
         mainSection: v.mainSection, genres: v.genres, 
         requiresPlan: v.requiresPlan, releaseYear: v.releaseYear, 
         isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
-        customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
+    customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
+    // Preferimos `thumbnail` (campo nuevo) si existe, luego logo, customTMDB
+    thumbnail: v.thumbnail || v.logo || v.customThumbnail || v.tmdbThumbnail || '',
         trailerUrl: v.trailerUrl, active: v.active,
         subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
         seasons: v.tipo !== "pelicula" ? (v.seasons || []).map(s => ({
@@ -718,6 +750,21 @@ router.post("/upload-link", verifyToken, isAdmin, async (req, res, next) => {
       releaseYear, isFeatured, active, logo, customThumbnail, trailerUrl,
       watchProgress: [] 
     });
+
+    // --- Normalización de requiresPlan: forzar planes para secciones CINE y fallback seguro ---
+    try {
+      const mainSec = videoData.mainSection || "";
+      if (typeof mainSec === 'string' && mainSec.startsWith('CINE') && videoData.tipo === 'pelicula') {
+        // Para películas en secciones CINE, forzar todos los planes excepto 'gplay'
+        videoData.requiresPlan = ['estandar', 'sports', 'cinefilo', 'premium'];
+        try { console.log(`BACKEND /api/videos/upload-link - Forzando requiresPlan para CINE: ${videoData.title}`); } catch(e) {}
+      } else if (!videoData.requiresPlan || videoData.requiresPlan.length === 0) {
+        // Fallback seguro: si queda vacío, asignar 'gplay' para evitar comportamientos inesperados
+        videoData.requiresPlan = ['gplay'];
+      }
+    } catch (normErr) {
+      console.warn('Advertencia al normalizar requiresPlan en /upload-link:', normErr?.message || normErr);
+    }
 
     const savedVideo = await videoData.save();
     res.status(201).json({ message: "Video VOD guardado exitosamente.", video: savedVideo });
@@ -959,6 +1006,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       title: video.title,
       url: video.url || "",
       description: video.description || "",
+  tmdbRating: video.tmdbRating || video.rating || video.vote_average || null,
       tipo: video.tipo,
       subtipo: video.subtipo, // Añadir subtipo
       subcategoria: video.subcategoria,
