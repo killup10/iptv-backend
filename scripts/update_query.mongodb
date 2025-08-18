@@ -1,0 +1,35 @@
+db.videos.updateMany(
+    { 
+        mainSection: 'POR_GENERO',
+        tipo: 'pelicula'
+    },
+    [
+        {
+            $set: {
+                requiresPlan: ['estandar', 'cinefilo', 'sports', 'premium'],
+                genres: {
+                    $map: {
+                        input: "$genres",
+                        as: "genre",
+                        in: {
+                            $switch: {
+                                branches: [
+                                    { case: { $eq: ["$$genre", "ACCION"] }, then: "Acción" },
+                                    { case: { $eq: ["$$genre", "ACCIÓN"] }, then: "Acción" },
+                                    { case: { $eq: ["$$genre", "Accion"] }, then: "Acción" },
+                                    { case: { $eq: ["$$genre", "COMEDIA"] }, then: "Comedia" },
+                                    { case: { $eq: ["$$genre", "KIDS"] }, then: "Kids" },
+                                    { case: { $eq: ["$$genre", "FAMILIAR"] }, then: "Familiar" },
+                                    { case: { $eq: ["$$genre", "TERROR"] }, then: "Terror" },
+                                    { case: { $eq: ["$$genre", "SUSPENSO"] }, then: "Suspenso" },
+                                    { case: { $eq: ["$$genre", "Suspenso"] }, then: "Suspenso" }
+                                ],
+                                default: "$$genre"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+)
