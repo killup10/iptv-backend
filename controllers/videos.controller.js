@@ -1,4 +1,5 @@
 import Video from "../models/Video.js";
+import UserProgress from '../models/UserProgress.js';
 import mongoose from "mongoose";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 
@@ -6,102 +7,52 @@ import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Obtiene la lista de "Continuar Viendo" específica para el usuario actual.
 export const getContinueWatching = async (req, res, next) => {
   try {
-    // 1. Obtener el ID del usuario desde el token verificado
     const userId = req.user.id;
-    if (!userId) {
-      return res.status(401).json({ error: "No se pudo identificar al usuario." });
-    }
+    if (!userId) return res.status(401).json({ error: 'No se pudo identificar al usuario.' });
 
     const userPlanFromToken = req.user.plan || 'gplay';
-    // Normalizar el plan en caso de que algunos usuarios sigan teniendo
-    // el valor antiguo 'basico' guardado
     const normalizedUserPlanKey = userPlanFromToken === 'basico' ? 'gplay' : userPlanFromToken;
     const isAdminUser = req.user.role === 'admin';
 
-    // 2. Construir la consulta para encontrar el progreso del usuario específico
-    let query = {
-      active: true,
-      // $elemMatch busca un elemento en el array 'watchProgress' que cumpla TODAS estas condiciones
-      watchProgress: {
-        $elemMatch: {
-          userId: new mongoose.Types.ObjectId(userId),
-          lastTime: { $gt: 5 }, // Progreso de más de 5 segundos
-          completed: { $ne: true } // Y no esté completado
-        }
-      }
-    };
+    // Obtener entradas de UserProgress y popular video
+    const progressEntries = await UserProgress.find({ user: userId, progress: { $gt: 5 }, }).populate('video').lean();
 
-    // 3. Aplicar filtro de plan si el usuario no es admin
+    // Filtrar out los que no tienen video o video no activo
+    let items = progressEntries
+      .filter(pe => pe.video && pe.video.active && !pe.completed)
+      .map(pe => ({
+        id: pe.video._id,
+        _id: pe.video._id,
+        name: pe.video.title,
+        title: pe.video.title,
+        thumbnail: pe.video.logo || pe.video.customThumbnail || pe.video.tmdbThumbnail || '',
+        url: pe.video.url || '',
+        tipo: pe.video.tipo,
+        mainSection: pe.video.mainSection,
+        genres: pe.video.genres || [],
+        trailerUrl: pe.video.trailerUrl || '',
+        watchProgress: { lastTime: pe.progress, lastWatched: pe.lastWatched, lastSeason: pe.lastSeason ?? 0, lastChapter: pe.lastChapter ?? 0 },
+        seasons: pe.video.seasons || [],
+        itemType: pe.video.tipo === 'pelicula' ? 'movie' : 'serie',
+        requiresPlan: pe.video.requiresPlan || []
+      }));
+
+    // Aplicar filtro por plan si no es admin
     if (!isAdminUser) {
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
       const userPlanLevel = planHierarchy[normalizedUserPlanKey] || 0;
-      const accessiblePlanKeys = Object.keys(planHierarchy).filter(
-        planKey => planHierarchy[planKey] <= userPlanLevel
-      );
-      query.requiresPlan = { $in: accessiblePlanKeys };
+      items = items.filter(item => {
+        const requires = item.requiresPlan || [];
+        if (requires.length === 0) return false; // requerir al menos un plan
+        return requires.some(r => (planHierarchy[r] || 0) <= userPlanLevel);
+      });
     }
 
-    // 4. Ejecutar la consulta en la base de datos
-    console.log('QUERY BACKEND:', query);
-    const videos = await Video.find(query)
-      // No podemos ordenar por el campo del array aquí, lo haremos después
-      .limit(20) // Obtenemos un poco más para ordenar y luego limitar
-      // CAMBIO: Seleccionar 'seasons' en lugar de 'chapters'
-      .select('title url tipo mainSection genres logo customThumbnail tmdbThumbnail trailerUrl watchProgress seasons')
-      .lean(); // .lean() es más rápido para objetos JS planos
+    // Ordenar por lastWatched desc y limitar
+    items = items.sort((a, b) => new Date(b.watchProgress.lastWatched || 0) - new Date(a.watchProgress.lastWatched || 0)).slice(0, 10);
 
-    // 5. Mapear y formatear la respuesta
-    const continueWatchingItems = videos.map(video => {
-      // Encontrar la entrada de progreso específica del usuario que coincidió con $elemMatch
-      const userProgress = video.watchProgress.find(p => p.userId.toString() === userId);
-
-      // Si por alguna razón no se encuentra (aunque $elemMatch debería garantizarlo), se omite
-      if (!userProgress) return null;
-
-      let currentChapter = null;
-      let currentSeasonChapters = [];
-
-      // Si es una serie, encontrar el capítulo y la temporada correctos
-      if (video.tipo !== 'pelicula' && video.seasons && video.seasons.length > userProgress.lastSeason) {
-        const season = video.seasons[userProgress.lastSeason];
-        currentSeasonChapters = season.chapters || []; // Capítulos de la temporada actual
-        if (currentSeasonChapters.length > userProgress.lastChapter) {
-          currentChapter = currentSeasonChapters[userProgress.lastChapter];
-        }
-      }
-      
-      // Asegurarse de que el watchProgress incluye lastSeason
-      // Si el campo no existe en el documento, se inicializa a 0
-      if (userProgress.lastSeason === undefined) {
-          userProgress.lastSeason = 0;
-      }
-
-      return {
-        id: video._id,
-        _id: video._id,
-        name: video.title,
-        title: video.title,
-        thumbnail: video.logo || video.customThumbnail || video.tmdbThumbnail || "",
-        url: video.url, // Para películas, será la URL de la película. Para series, es la URL de la serie (que no se usa para la reproducción de capítulos).
-        tipo: video.tipo,
-        mainSection: video.mainSection,
-        genres: video.genres,
-        trailerUrl: video.trailerUrl || "",
-        watchProgress: userProgress, // ¡Importante! Devolvemos solo el progreso del usuario
-        // CAMBIO: Pasar las temporadas completas para que el frontend maneje la visualización
-        seasons: video.seasons || [], 
-        // CAMBIO: Añadir el capítulo actual específico que se está viendo, si es una serie
-        currentPlayingChapter: currentChapter, 
-        itemType: video.tipo === 'pelicula' ? 'movie' : 'serie'
-      };
-    })
-    .filter(item => item !== null) // Limpiar cualquier nulo
-    .sort((a, b) => new Date(b.watchProgress.lastWatched) - new Date(a.watchProgress.lastWatched)) // Ordenar por fecha de visualización
-    .slice(0, 10); // Limitar a los 10 más recientes
-
-    console.log(`[GET /api/videos/user/continue-watching] User ${userId} | Enviando ${continueWatchingItems.length} items.`);
-    res.json(continueWatchingItems);
-
+    console.log(`[GET /api/videos/user/continue-watching] User ${userId} | Enviando ${items.length} items.`);
+    res.json(items);
   } catch (error) {
     console.error(`Error en GET /api/videos/user/continue-watching para user ${req.user?.id}:`, error);
     next(error);
@@ -439,7 +390,11 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
                 if (vodData.title) {
                     vodData.thumbnail = await getTMDBThumbnail(vodData.title);
                 }
-                const newVideo = new Video(vodData);
+          // Si la película pertenece a una sección de CINE, forzar planes (no incluir 'gplay')
+          if (vodData.tipo === 'pelicula' && typeof vodData.mainSection === 'string' && vodData.mainSection.startsWith('CINE')) {
+            vodData.requiresPlan = ['estandar','sports','cinefilo','premium'];
+          }
+          const newVideo = new Video(vodData);
                 await newVideo.save();
                 vodsAddedCount++;
             } else {
@@ -626,6 +581,20 @@ export const updateVideoAdmin = async (req, res, next) => {
       // Las películas no tienen temporadas.
       videoToUpdate.seasons = [];
     }
+    // Si el admin dejó 'requiresPlan' vacío al editar, asegurar al menos 'gplay' para que el contenido sea visible
+    try {
+      if (!Array.isArray(videoToUpdate.requiresPlan) || videoToUpdate.requiresPlan.length === 0) {
+        videoToUpdate.requiresPlan = ['gplay'];
+      }
+    } catch (rpErr) {
+      console.warn('[updateVideoAdmin] No se pudo normalizar requiresPlan:', rpErr?.message || rpErr);
+    }
+      // Si la película está en una sección de CINE y es película forzar requiresPlan
+      try {
+        if (videoToUpdate.tipo === 'pelicula' && typeof videoToUpdate.mainSection === 'string' && videoToUpdate.mainSection.startsWith('CINE')) {
+          videoToUpdate.requiresPlan = ['estandar','sports','cinefilo','premium'];
+        }
+      } catch (e) { /* ignore */ }
     
     const updatedVideo = await videoToUpdate.save();
     console.log(`[updateVideoAdmin] Video ${id} actualizado exitosamente.`);

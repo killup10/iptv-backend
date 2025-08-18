@@ -15,6 +15,23 @@ const UserProgressSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  // lastTime keeps the raw seconds position reported by the player (frontend uses this)
+  lastTime: {
+    type: Number,
+    default: 0,
+  },
+  lastSeason: {
+    type: Number,
+    default: 0,
+  },
+  lastChapter: {
+    type: Number,
+    default: 0,
+  },
+  completed: {
+    type: Boolean,
+    default: false,
+  },
   lastWatched: {
     type: Date,
     default: Date.now,

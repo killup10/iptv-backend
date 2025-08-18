@@ -1,6 +1,7 @@
 import express from 'express';
 import { getProgress, updateProgress } from '../controllers/progress.controller.js';
 import { verifyToken } from '../middlewares/verifyToken.js';
+import UserProgress from '../models/UserProgress.js';
 
 const router = express.Router();
 
