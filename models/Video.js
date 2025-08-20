@@ -113,6 +113,7 @@ const videoSchema = new mongoose.Schema({
   logo: { type: String, default: '' },
   customThumbnail: { type: String, default: '' },
   tmdbThumbnail: { type: String, default: '' },
+  tmdbRating: { type: Number, default: null },
   
   trailerUrl: { type: String, default: '', trim: true },
 }, { 

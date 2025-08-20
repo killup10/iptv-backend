@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import Video from '../models/Video.js';
 
-dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
+// Load .env from the backend directory reliably (works on Windows and *nix)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/teamg';
 

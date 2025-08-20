@@ -1,2 +1,8 @@
 node_modules/
 uploads/
+# ignore script outputs and logs
+scripts/*.output.txt
+scripts/restore_thumbnails.apply.output.txt
+scripts/update_bulk_output.txt
+scripts/update_output.txt
+update_output.txt

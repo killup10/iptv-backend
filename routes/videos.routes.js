@@ -13,6 +13,17 @@ import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosA
 
 const router = express.Router();
 
+// Helper: compute a displayable rating from multiple possible fields.
+function computeRatingDisplay(v) {
+  const raw = (typeof v.tmdbRating === 'number' ? v.tmdbRating :
+    (v.rating ?? v.vote_average ?? v.ranking ?? v.rankingLabel ?? v.ratingText ?? v.displayRating ?? v.rating_tmdb ?? null));
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return Number(raw).toFixed(1);
+  if (typeof raw === 'string' && raw.trim() !== '' && raw.toLowerCase() !== 'null') return raw;
+  if (!isNaN(Number(raw))) return Number(raw).toFixed(1);
+  return null;
+}
+
 // Configuración de Multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -49,7 +60,8 @@ router.get("/public/featured-movies", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
+  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+  ratingDisplay: computeRatingDisplay(v),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(movies.map(mapVODToPublicFormat));
@@ -78,7 +90,8 @@ router.get("/public/featured-series", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
+  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+  ratingDisplay: computeRatingDisplay(v),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(series.map(mapVODToPublicFormat));
@@ -107,7 +120,8 @@ router.get("/public/featured-animes", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
+  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+  ratingDisplay: computeRatingDisplay(v),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(animes.map(mapVODToPublicFormat));
@@ -575,7 +589,8 @@ router.get("/", verifyToken, async (req, res, next) => {
       name: v.title,
       title: v.title,
   thumbnail: v.thumbnail || "", 
-  tmdbRating: v.tmdbRating || v.rating || v.vote_average || null,
+  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+  ratingDisplay: computeRatingDisplay(v),
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
       description: v.description || "", trailerUrl: v.trailerUrl || "", 
       tipo: v.tipo,
@@ -596,6 +611,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     // Preferimos `thumbnail` (campo nuevo) si existe, luego logo, customTMDB
     thumbnail: v.thumbnail || v.logo || v.customThumbnail || v.tmdbThumbnail || '',
         trailerUrl: v.trailerUrl, active: v.active,
+  ratingDisplay: computeRatingDisplay(v),
         subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
         seasons: v.tipo !== "pelicula" ? (v.seasons || []).map(s => ({
             seasonNumber: s.seasonNumber,
@@ -1006,7 +1022,8 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       title: video.title,
       url: video.url || "",
       description: video.description || "",
-  tmdbRating: video.tmdbRating || video.rating || video.vote_average || null,
+  tmdbRating: (typeof video.tmdbRating === 'number' ? video.tmdbRating : (video.rating ?? video.vote_average ?? null)),
+  ratingDisplay: computeRatingDisplay(video),
       tipo: video.tipo,
       subtipo: video.subtipo, // Añadir subtipo
       subcategoria: video.subcategoria,
