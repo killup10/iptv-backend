@@ -24,6 +24,17 @@ function computeRatingDisplay(v) {
   return null;
 }
 
+// Helper: build absolute URL for uploaded or static assets so frontend can load images
+function makeFullUrl(req, p) {
+  if (!p) return '';
+  if (typeof p !== 'string') return '';
+  if (p.startsWith('http')) return p;
+  const host = req?.get ? `${req.protocol}://${req.get('host')}` : '';
+  if (!host) return p;
+  if (p.startsWith('/')) return host + p;
+  return host + '/' + p;
+}
+
 // Configuración de Multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -59,9 +70,13 @@ router.get("/public/featured-movies", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-  ratingDisplay: computeRatingDisplay(v),
+      // Provide absolute URLs and include alternate image fields for the frontend
+      thumbnail: makeFullUrl(req, v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png"),
+      logo: makeFullUrl(req, v.logo || ''),
+      customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+      tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
+      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+      ratingDisplay: computeRatingDisplay(v),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(movies.map(mapVODToPublicFormat));
@@ -85,13 +100,16 @@ router.get("/public/featured-series", async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-      releaseYear: v.releaseYear || null, 
+      releaseYear: v.releaseYear || null,
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-  ratingDisplay: computeRatingDisplay(v),
+      thumbnail: makeFullUrl(req, v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png"),
+      logo: makeFullUrl(req, v.logo || ''),
+      customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+      tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
+      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+      ratingDisplay: computeRatingDisplay(v),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(series.map(mapVODToPublicFormat));
