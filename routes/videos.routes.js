@@ -567,11 +567,11 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
         lastChapter: userProgressEntry.lastChapter || 0,
         completed: !!userProgressEntry.completed,
         lastWatched: userProgressEntry.lastWatched || new Date(),
-        // Mantener compatibilidad: `progress` almacena segundos como antes
-        progress: (userProgressEntry.progress !== undefined && userProgressEntry.progress !== null)
-                  ? userProgressEntry.progress
-                  : (typeof userProgressEntry.lastTime === 'number' ? userProgressEntry.lastTime : 0)
+       
+        // CORRECCIÓN: 'progress' en UserProgress SIEMPRE debe ser segundos para que `getContinueWatching` funcione.
+        progress: typeof userProgressEntry.lastTime === 'number' ? userProgressEntry.lastTime : 0
       };
+    
 
       const userProgressDoc = await UserProgress.findOneAndUpdate(
         { user: userId, video: video._id },
