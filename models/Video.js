@@ -34,8 +34,8 @@ const watchProgressEntrySchema = new mongoose.Schema({
 const videoSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   description: { type: String, default: "", trim: true },
-  url: { 
-    type: String, 
+  url: {
+    type: String,
     required: function() { return this.tipo === "pelicula"; },
     trim: true,
     default: ""
@@ -53,7 +53,7 @@ const videoSchema = new mongoose.Schema({
   },
   subcategoria: {
     type: String,
-    required: function() { 
+    required: function() {
       // La subcategoría NO es requerida para películas ni animes
       if (this.tipo === "pelicula" || this.tipo === "anime") return false;
       // Tampoco es requerida para series con subtipo anime
@@ -82,7 +82,7 @@ const videoSchema = new mongoose.Schema({
   // --- watchProgress actualizado para incluir lastSeason ---
   watchProgress: {
     type: [watchProgressEntrySchema],
-    default: [] 
+    default: []
   },
   mainSection: {
     type: String,
@@ -96,14 +96,14 @@ const videoSchema = new mongoose.Schema({
     ],
     default: "POR_GENERO",
   },
-  genres: [{ 
+  genres: [{
     type: String,
     trim: true,
   }],
-  requiresPlan: [{ 
+  requiresPlan: [{
     type: String,
     trim: true,
-    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"], 
+    enum: ["gplay", "estandar", "cinefilo", "sports", "premium"],
   }],
   releaseYear: { type: Number },
   isFeatured: { type: Boolean, default: false },
@@ -114,9 +114,9 @@ const videoSchema = new mongoose.Schema({
   customThumbnail: { type: String, default: '' },
   tmdbThumbnail: { type: String, default: '' },
   tmdbRating: { type: Number, default: null },
-  
+
   trailerUrl: { type: String, default: '', trim: true },
-}, { 
+}, {
   timestamps: true
 });
 
@@ -137,7 +137,7 @@ videoSchema.index({ "watchProgress.userId": 1, "watchProgress.lastWatched": -1 }
 // Índices compuestos
 videoSchema.index({ tipo: 1, active: 1, isFeatured: 1 });
 videoSchema.index({ mainSection: 1, tipo: 1, active: 1 });
-videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 }); 
-videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 }); 
+videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 });
+videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 });
 
 export default mongoose.model("Video", videoSchema);

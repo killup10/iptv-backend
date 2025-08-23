@@ -7,6 +7,8 @@ const CapituloSchema = new Schema({
   numero: { type: Number, required: true },
   video: { type: String, required: true },
   serie: { type: Schema.Types.ObjectId, ref: 'Serie', required: true },
+  // orden para reordenar capítulos sin modificar `numero`
+  order: { type: Number, default: 0 },
 }, {
   timestamps: true
 });

@@ -541,6 +541,21 @@ export const updateVideoAdmin = async (req, res, next) => {
       return res.status(404).json({ error: "Video no encontrado." });
     }
 
+    // Normalize subcategoria if provided: map common casings/variants to canonical values
+    if (Object.prototype.hasOwnProperty.call(updateData, 'subcategoria')) {
+      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "HBO Max", "Retro", "Animadas", "ZONA KIDS"];
+      const raw = (updateData.subcategoria || '').toString().trim();
+      const normalized = raw.toLowerCase();
+      const match = validSubcategorias.find(s => s.toString().trim().toLowerCase() === normalized);
+      if (match) {
+        // replace with canonical casing
+        updateData.subcategoria = match;
+      } else {
+        // unknown value: remove it so subsequent logic won't treat it as invalid
+        delete updateData.subcategoria;
+      }
+    }
+
     // Lista de campos que se pueden actualizar directamente
     const allowedFields = [
       'title', 'description', 'releaseYear', 'genres', 'active', 
@@ -616,9 +631,19 @@ export const updateVideoAdmin = async (req, res, next) => {
 
   } catch (error) {
     console.error(`Error actualizando video ${id}:`, error);
-    if (error.name === 'ValidationError') {
-        return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
+  if (error.name === 'ValidationError') {
+    // Normalize Mongoose ValidationError to a simple map: field -> message
+    const details = {};
+    try {
+      for (const [key, val] of Object.entries(error.errors || {})) {
+        details[key] = val?.message || String(val);
+      }
+    } catch (e) {
+      // fallback to raw errors object if something unexpected
+      return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
     }
+    return res.status(400).json({ error: "Error de validación del backend.", details });
+  }
     next(error);
   }
 };

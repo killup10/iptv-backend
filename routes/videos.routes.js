@@ -14,14 +14,48 @@ import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosA
 const router = express.Router();
 
 // Helper: compute a displayable rating from multiple possible fields.
+// Compute a normalized display value and optional textual label for ratings.
+function computeRating(v) {
+  const candidates = {
+    tmdb: typeof v.tmdbRating === 'number' ? v.tmdbRating : null,
+    rating: v.rating ?? null,
+    vote_average: v.vote_average ?? null,
+    ranking: v.ranking ?? null,
+    rankingLabel: v.rankingLabel ?? null,
+    ratingText: v.ratingText ?? null,
+    displayRating: v.displayRating ?? null,
+    rating_tmdb: v.rating_tmdb ?? null,
+  };
+
+  // Prefer explicit string labels when present (e.g. 'tbdt', '16+')
+  const textual = [candidates.rankingLabel, candidates.ratingText, candidates.displayRating].find(x => typeof x === 'string' && x.trim() !== '' && x.toLowerCase() !== 'null');
+  if (textual) return { display: textual, label: textual };
+
+  // Prefer tmdb numeric when available
+  const numeric = candidates.tmdb ?? candidates.rating ?? candidates.vote_average ?? candidates.ranking ?? candidates.rating_tmdb;
+  if (numeric !== undefined && numeric !== null && numeric !== '') {
+    const num = Number(numeric);
+    if (!Number.isNaN(num)) {
+      return { display: Number(num).toFixed(1), label: null };
+    }
+    // numeric-like string
+    if (!isNaN(Number(String(numeric)))) return { display: Number(String(numeric)).toFixed(1), label: null };
+  }
+
+  return { display: null, label: null };
+}
+
+// Normaliza y prioriza el valor que mostramos como 'ratingDisplay' en las respuestas.
 function computeRatingDisplay(v) {
-  const raw = (typeof v.tmdbRating === 'number' ? v.tmdbRating :
-    (v.rating ?? v.vote_average ?? v.ranking ?? v.rankingLabel ?? v.ratingText ?? v.displayRating ?? v.rating_tmdb ?? null));
-  if (raw === undefined || raw === null) return null;
-  if (typeof raw === 'number' && !Number.isNaN(raw)) return Number(raw).toFixed(1);
-  if (typeof raw === 'string' && raw.trim() !== '' && raw.toLowerCase() !== 'null') return raw;
-  if (!isNaN(Number(raw))) return Number(raw).toFixed(1);
-  return null;
+  try {
+    const computed = computeRating(v || {});
+    const persistedDisplay = v?.ratingDisplay ?? null;
+    const persistedLabel = v?.ratingLabel ?? null;
+    // Prioriza: valor persistido > valor computado numérico > label persistido
+    return persistedDisplay || computed.display || persistedLabel || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Helper: build absolute URL for uploaded or static assets so frontend can load images
@@ -61,7 +95,13 @@ router.get("/public/featured-movies", async (req, res, next) => {
   try {
     const criteria = { tipo: "pelicula", isFeatured: true, active: true };
     const movies = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
+      const mapVODToPublicFormat = (v) => {
+        const computed = computeRating(v);
+        const persistedDisplay = v.ratingDisplay ?? null;
+        const persistedLabel = v.ratingLabel ?? null;
+        const finalDisplay = persistedDisplay || computed.display;
+        const finalLabel = persistedLabel || computed.label;
+        return ({
       id: v._id,
       _id: v._id,
       name: v.title,
@@ -70,15 +110,18 @@ router.get("/public/featured-movies", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      // Provide absolute URLs and include alternate image fields for the frontend
-      thumbnail: makeFullUrl(req, v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png"),
-      logo: makeFullUrl(req, v.logo || ''),
-      customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
-      tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
+  // Provide absolute URLs and include alternate image fields for the frontend
+  // Priorizar la miniatura personalizada (customThumbnail) sobre logo (TMDB)
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  logo: makeFullUrl(req, v.logo || ''),
+  customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+  tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
       tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-      ratingDisplay: computeRatingDisplay(v),
+      ratingDisplay: finalDisplay,
+      ratingLabel: finalLabel,
       trailerUrl: v.trailerUrl || ""
     });
+    };
     res.json(movies.map(mapVODToPublicFormat));
   } catch (error) { 
     console.error("Error en BACKEND /public/featured-movies:", error);
@@ -95,7 +138,13 @@ router.get("/public/featured-series", async (req, res, next) => {
       active: true 
     };
     const series = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
+    const mapVODToPublicFormat = (v) => {
+      const computed = computeRating(v);
+      const persistedDisplay = v.ratingDisplay ?? null;
+      const persistedLabel = v.ratingLabel ?? null;
+      const finalDisplay = persistedDisplay || computed.display;
+      const finalLabel = persistedLabel || computed.label;
+      return ({
       id: v._id,
       _id: v._id,
       name: v.title,
@@ -104,14 +153,17 @@ router.get("/public/featured-series", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: makeFullUrl(req, v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  // Priorizar customThumbnail para que la imagen pegada en Admin se muestre primero
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
       logo: makeFullUrl(req, v.logo || ''),
       customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
       tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
       tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-      ratingDisplay: computeRatingDisplay(v),
+      ratingDisplay: finalDisplay,
+      ratingLabel: finalLabel,
       trailerUrl: v.trailerUrl || ""
     });
+    };
     res.json(series.map(mapVODToPublicFormat));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-series:", error.message);
@@ -128,7 +180,13 @@ router.get("/public/featured-animes", async (req, res, next) => {
       active: true 
     };
     const animes = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
+    const mapVODToPublicFormat = (v) => {
+      const computed = computeRating(v);
+      const persistedDisplay = v.ratingDisplay ?? null;
+      const persistedLabel = v.ratingLabel ?? null;
+      const finalDisplay = persistedDisplay || computed.display;
+      const finalLabel = persistedLabel || computed.label;
+      return ({
       id: v._id,
       _id: v._id,
       name: v.title,
@@ -137,11 +195,14 @@ router.get("/public/featured-animes", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  // Priorizar customThumbnail aquí también
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-  ratingDisplay: computeRatingDisplay(v),
+  ratingDisplay: finalDisplay,
+  ratingLabel: finalLabel,
       trailerUrl: v.trailerUrl || ""
     });
+    };
     res.json(animes.map(mapVODToPublicFormat));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-animes:", error.message);
@@ -166,7 +227,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(doramas.map(mapVODToPublicFormat));
@@ -193,7 +254,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(novelas.map(mapVODToPublicFormat));
@@ -220,7 +281,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(documentales.map(mapVODToPublicFormat));
@@ -606,7 +667,11 @@ router.get("/", verifyToken, async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-  thumbnail: v.thumbnail || "", 
+  // Priorizar logo (si es un path/url vertical), luego customThumbnail (URL pegada por admin), luego tmdbThumbnail
+  // Priorizar customThumbnail al mapear para usuarios
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+  tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
   ratingDisplay: computeRatingDisplay(v),
       url: v.url, mainSection: v.mainSection, genres: v.genres, 
@@ -627,7 +692,8 @@ router.get("/", verifyToken, async (req, res, next) => {
         isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
     customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
     // Preferimos `thumbnail` (campo nuevo) si existe, luego logo, customTMDB
-    thumbnail: v.thumbnail || v.logo || v.customThumbnail || v.tmdbThumbnail || '',
+  // En el formato admin preferimos mostrar la miniatura personalizada si existe
+  thumbnail: v.customThumbnail || v.thumbnail || v.logo || v.tmdbThumbnail || '',
         trailerUrl: v.trailerUrl, active: v.active,
   ratingDisplay: computeRatingDisplay(v),
         subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
@@ -680,8 +746,11 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       return res.status(400).json({ error: "Temporadas son obligatorias para series/anime/dorama/novela/documental." });
     }
     if (tipo !== "pelicula") { // La subcategoría aplica a todo lo que no sea película
-      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"]; // Añadir ZONA KIDS
-      if (!subcategoria || !validSubcategorias.includes(subcategoria)) {
+      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "HBO Max", "Retro", "Animadas", "ZONA KIDS"]; // Añadir ZONA KIDS y HBO Max
+      // Aceptar coincidencias sin considerar mayúsculas/minúsculas
+      const normalized = (subcategoria || '').toString().trim().toLowerCase();
+      const matches = validSubcategorias.some(s => s.toString().trim().toLowerCase() === normalized);
+      if (!subcategoria || !matches) {
         return res.status(400).json({ 
           error: `Subcategoría inválida para series/anime/dorama/novela/documental. Opciones válidas: ${validSubcategorias.join(', ')}`,
           validSubcategorias
@@ -922,9 +991,11 @@ router.get("/:id", verifyToken, async (req, res, next) => {
           releaseYear: video.releaseYear,
           isFeatured: video.isFeatured,
           active: video.active,
-          logo: video.logo,
-          customThumbnail: video.customThumbnail,
-          tmdbThumbnail: video.tmdbThumbnail,
+  logo: makeFullUrl(req, video.logo || ''),
+  customThumbnail: makeFullUrl(req, video.customThumbnail || ''),
+  tmdbThumbnail: makeFullUrl(req, video.tmdbThumbnail || ''),
+  // Computed thumbnail that the frontend should use (custom > logo > tmdb)
+  thumbnail: makeFullUrl(req, video.customThumbnail || video.logo || video.tmdbThumbnail || "/img/placeholder-default.png"),
           trailerUrl: video.trailerUrl,
           seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
             seasonNumber: s.seasonNumber,

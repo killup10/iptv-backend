@@ -7,6 +7,8 @@ const SerieSchema = new Schema({
   nombre: { type: String, required: true },
   descripcion: String,
   imagen: String,
+  // imagen personalizada subida por admin que debe sobreescribir la imagen TMDB
+  customThumbnail: String,
   capitulos: [{ type: Schema.Types.ObjectId, ref: 'Capitulo' }],
 });
 
