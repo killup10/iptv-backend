@@ -62,8 +62,9 @@ const videoSchema = new mongoose.Schema({
       return true;
     },
     enum: [
-      "Netflix", "Prime Video", "Disney", "Apple TV",
-      "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
+           
+      "Netflix", "Prime Video", "Disney", "Apple TV", "HBO Max",
+       "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
     ],
     default: function() {
       // No asignar default para animes
