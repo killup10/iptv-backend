@@ -8,6 +8,7 @@ import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
+import { getRecentAdminUploads } from "../controllers/videos.controller.js";
 
 
 
@@ -885,6 +886,9 @@ router.post("/upload-text", verifyToken, isAdmin, multer({
     fieldSize: 50 * 1024 * 1024
   }
 }).single("file"), createBatchVideosFromTextAdmin);
+
+// GET /api/videos/recent-uploads — listar subidas recientes por tiempo (admin)
+router.get('/recent-uploads', verifyToken, isAdmin, getRecentAdminUploads);
 
 // POST /api/videos/upload-m3u
 router.post("/upload-m3u", verifyToken, isAdmin, upload.single("file"), async (req, res, next) => {

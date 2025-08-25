@@ -507,6 +507,38 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
   }
 };
 
+// Listar subidas recientes (admin) — útil para revisar/retroceder una carga masiva
+export const getRecentAdminUploads = async (req, res, next) => {
+  try {
+    const minutes = parseInt(req.query.minutes, 10) || 60; // por defecto 60 minutos
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+    const createdByMe = req.query.createdByMe === 'true' || req.query.createdByMe === true;
+
+    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+    const query = { createdAt: { $gte: cutoff } };
+    if (createdByMe && req.user && req.user.id) {
+      query.user = req.user.id;
+    }
+
+    const recent = await Video.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+    // Map minimal para frontend
+    const mapped = recent.map(v => ({
+      id: v._id,
+      title: v.title,
+      tipo: v.tipo,
+      mainSection: v.mainSection,
+      requiresPlan: v.requiresPlan || [],
+      createdAt: v.createdAt,
+      user: v.user || null
+    }));
+
+    res.json({ videos: mapped, count: mapped.length });
+  } catch (error) {
+    console.error('CTRL: getRecentAdminUploads error:', error);
+    next(error);
+  }
+};
+
 // --- FUNCIÓN deleteBatchVideosAdmin ---
 export const deleteBatchVideosAdmin = async (req, res, next) => {
   try {
