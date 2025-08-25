@@ -20,9 +20,14 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if ( file.mimetype === "application/octet-stream" || file.mimetype === "audio/mpegurl" ||
-         file.mimetype === "application/vnd.apple.mpegurl" ||
-         file.originalname.endsWith(".m3u") || file.originalname.endsWith(".m3u8") ) {
+    const allowedTypes = [
+      "application/octet-stream",
+      "audio/mpegurl",
+      "application/vnd.apple.mpegurl",
+      "application/x-mpegURL",
+      "text/plain"
+    ];
+    if (allowedTypes.includes(file.mimetype) || file.originalname.endsWith('.m3u') || file.originalname.endsWith('.m3u8')) {
       cb(null, true);
     } else {
       cb(new Error("Tipo de archivo no permitido. Solo .m3u o .m3u8."), false);

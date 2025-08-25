@@ -284,38 +284,87 @@ export const processM3UAdmin = async (req, res, next) => {
   if (!req.file) {
     return res.status(400).json({ error: "No se proporcionó ningún archivo M3U." });
   }
+
   try {
-    const fileContent = req.file.buffer.toString('utf8');
-    const lines = fileContent.split(/\r?\n/);
+  let fileContent = req.file.buffer.toString('utf8');
+  // Trim BOM if present and normalize whitespace/line endings
+  if (fileContent.charCodeAt(0) === 0xFEFF) fileContent = fileContent.slice(1);
+  fileContent = fileContent.replace(/\u00A0/g, ' ').replace(/\r\n/g, '\n');
+  const lines = fileContent.split('\n');
+  console.log('CTRL: processM3UAdmin - primeras líneas:', lines.slice(0, 8));
     let channelsToAdd = [];
-    let currentChannel = {};
-    if (!lines[0].startsWith('#EXTM3U')) {
-      return res.status(400).json({ error: 'Archivo M3U inválido: Falta la cabecera #EXTM3U.' });
+    let currentChannel = null; // Usar null para indicar que no hay canal en construcción
+
+    // La cabecera #EXTM3U es recomendada, pero podemos ser flexibles si el contenido parece válido.
+    if (!lines[0] || !/^#EXTM3U/i.test(String(lines[0]).trim())) {
+      console.warn("CTRL: processM3UAdmin - Advertencia: El archivo no comienza con #EXTM3U. Se intentará procesar de todas formas.");
     }
-    for (const line of lines) {
-      if (line.startsWith('#EXTINF:')) {
-        currentChannel = { user: req.user.id, active: true, isPubliclyVisible: true, requiresPlan: ['gplay'] };
-        const infoMatch = line.match(/#EXTINF:-1(?:.*?tvg-id="([^"]*)")?(?:.*?tvg-name="([^"]*)")?(?:.*?tvg-logo="([^"]*)")?(?:.*?group-title="([^"]*)")?,(.+)/);
+
+    for (const rawLine of lines) {
+      const line = String(rawLine || '').trim();
+      if (/^#EXTINF:/i.test(line)) {
+        // Si había un canal anterior sin URL, se descarta.
+        if (currentChannel) {
+          console.log(`CTRL: processM3UAdmin - Se encontró un #EXTINF huérfano (sin URL), descartando canal anterior: ${currentChannel.name}`);
+        }
+
+        currentChannel = {
+          user: req.user.id,
+          active: true,
+          isPubliclyVisible: true,
+          requiresPlan: ['gplay'],
+          section: 'General', // Valor por defecto
+          logo: ''
+        };
+
+        // Aceptar atributos con comillas dobles o simples y capturar texto tras la coma.
+        const infoMatch = line.match(/#EXTINF:[-0-9]+(?:.*?tvg-id=(?:"|')([^"']*)(?:"|'))?(?:.*?tvg-name=(?:"|')([^"']*)(?:"|'))?(?:.*?tvg-logo=(?:"|')([^"']*)(?:"|'))?(?:.*?group-title=(?:"|')([^"']*)(?:"|'))?\s*,\s*(.*)$/i);
+
         if (infoMatch) {
-          currentChannel.name = (infoMatch[2] || infoMatch[5] || 'Canal Sin Nombre').trim();
+          const maybeTrailing = infoMatch[5] || '';
+          currentChannel.name = (infoMatch[2] || maybeTrailing || 'Canal Sin Nombre').trim();
           currentChannel.logo = infoMatch[3] || '';
           currentChannel.section = infoMatch[4] || 'General';
+          // Si el texto tras la coma parece una URL, la usamos directamente
+          if (/^(https?:\/\/|rtmp:\/\/|udp:\/\/|\/\/)/i.test(maybeTrailing)) {
+            currentChannel.url = maybeTrailing.trim();
+            channelsToAdd.push(currentChannel);
+            currentChannel = null;
+            continue;
+          }
         } else {
-          const nameMatch = line.match(/#EXTINF:-1,(.+)/);
-          if (nameMatch) currentChannel.name = nameMatch[1].trim();
+          // Formato simple: #EXTINF:-1,Nombre del Canal
+          const nameMatch = line.match(/#EXTINF:[-0-9]+,(.+)/i);
+          if (nameMatch) {
+            currentChannel.name = nameMatch[1].trim();
+          } else {
+            console.warn(`CTRL: processM3UAdmin - Línea #EXTINF no reconocida, saltando: ${line}`);
+            currentChannel = null; // Invalida el canal actual
+            continue;
+          }
         }
-      } else if (line.trim() && !line.startsWith('#') && currentChannel.name) {
+      } else if (/^#EXTGRP:/i.test(line) && currentChannel) {
+        // Maneja el tag #EXTGRP en una línea separada.
+        const groupMatch = line.match(/^#EXTGRP:(.+)/i);
+        if (groupMatch) {
+          currentChannel.section = groupMatch[1].trim();
+        }
+      } else if (line && !line.startsWith('#') && currentChannel && currentChannel.name) {
+        // Esta línea debería ser la URL.
         currentChannel.url = line.trim();
         if (currentChannel.name && currentChannel.url) {
           channelsToAdd.push(currentChannel);
         }
-        currentChannel = {};
+        currentChannel = null; // Resetea para el próximo canal
       }
     }
+
     if (channelsToAdd.length === 0) {
-      return res.status(400).json({ message: "No se encontraron canales válidos en el archivo M3U." });
+      return res.status(400).json({ message: "No se encontraron canales válidos en el archivo M3U. Verifique el formato." });
     }
+
     let channelsAddedCount = 0;
+    let channelsSkippedCount = 0;
     for (const chData of channelsToAdd) {
       try {
         const existingChannel = await Channel.findOne({ url: chData.url });
@@ -324,16 +373,23 @@ export const processM3UAdmin = async (req, res, next) => {
           await newChannel.save();
           channelsAddedCount++;
         } else {
-          console.log(`CTRL: processM3UAdmin - Canal ya existente (misma URL): ${chData.url}, omitiendo.`);
+          channelsSkippedCount++;
         }
       } catch (saveError) {
         console.error(`CTRL: processM3UAdmin - Error guardando canal individual ${chData.name}: ${saveError.message}`);
       }
     }
-    console.log(`CTRL: processM3UAdmin - Canales procesados del M3U: ${channelsToAdd.length}, Canales nuevos añadidos: ${channelsAddedCount}`);
-    res.json({ message: `M3U procesado. ${channelsAddedCount} canales nuevos añadidos de ${channelsToAdd.length} encontrados.`, channelsAdded: channelsAddedCount });
+
+    console.log(`CTRL: processM3UAdmin - Canales procesados: ${channelsToAdd.length}. Nuevos: ${channelsAddedCount}. Omitidos (URL duplicada): ${channelsSkippedCount}`);
+    res.json({
+      message: `M3U procesado. ${channelsAddedCount} canales nuevos añadidos de ${channelsToAdd.length} encontrados. ${channelsSkippedCount} canales fueron omitidos por tener URL duplicada.`,
+      channelsAdded: channelsAddedCount,
+      channelsSkipped: channelsSkippedCount,
+      totalFound: channelsToAdd.length
+    });
+
   } catch (error) {
-    console.error("Error en CTRL:processM3UAdmin:", error.message);
+    console.error("Error en CTRL:processM3UAdmin:", error.message, error.stack);
     next(error);
   }
 };
