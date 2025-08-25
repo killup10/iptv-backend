@@ -394,6 +394,35 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
       console.warn('CTRL: createBatchVideosFromTextAdmin - No se pudo aplicar requiresPlan del form-data:', e?.message || e);
     }
 
+    // Si el admin indicó categoría/subcategoría en el form-data, aplicarla a los VODs parseados
+    try {
+      const providedCategoria = req.body?.categoria;
+      const providedSubcategoria = req.body?.subcategoria;
+      if (providedCategoria) {
+        videosToAdd = videosToAdd.map(v => {
+          try {
+            // Para películas, usar la subcategoría como mainSection (p.ej. CINE_4K)
+            if (providedCategoria === 'pelicula') {
+              v.tipo = 'pelicula';
+              if (providedSubcategoria) v.mainSection = providedSubcategoria;
+              // asegurar que las series no conserven seasons por error
+              if (Array.isArray(v.seasons) && v.seasons.length > 0 && v.tipo === 'pelicula') {
+                v.seasons = [];
+              }
+            }
+            // Para series, aplicar subcategoria si se indicó
+            if (providedCategoria === 'serie') {
+              v.tipo = v.tipo || 'serie';
+              if (providedSubcategoria) v.subcategoria = providedSubcategoria;
+            }
+            return v;
+          } catch (inner) { return v; }
+        });
+      }
+    } catch (e) {
+      console.warn('CTRL: createBatchVideosFromTextAdmin - No se pudo aplicar categoria/subcategoria del form-data:', e?.message || e);
+    }
+
     let vodsAddedCount = 0;
     let vodsSkippedCount = 0;
     const errors = [];
@@ -517,7 +546,13 @@ export const getRecentAdminUploads = async (req, res, next) => {
     const cutoff = new Date(Date.now() - minutes * 60 * 1000);
     const query = { createdAt: { $gte: cutoff } };
     if (createdByMe && req.user && req.user.id) {
-      query.user = req.user.id;
+      // Match either the string id or an ObjectId to avoid misses depending on how 'user' was stored
+      try {
+        const uid = req.user.id;
+        query.user = { $in: [uid, mongoose.Types.ObjectId(uid)] };
+      } catch (e) {
+        query.user = req.user.id;
+      }
     }
 
     const recent = await Video.find(query).sort({ createdAt: -1 }).limit(limit).lean();
