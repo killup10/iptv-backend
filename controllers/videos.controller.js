@@ -169,7 +169,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
         console.log("CTRL: createBatchVideosFromTextAdmin - Archivo M3U detectado.");
     }
 
-    for (let i = 0; i < lines.length; i++) {
+  for (let i = 0; i < lines.length; i++) {
       const line = lines[i]?.trim();
       if (!line) continue;
 
@@ -361,6 +361,37 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
 
     if (videosToAdd.length === 0) {
       return res.status(400).json({ message: `No se encontraron VODs válidos en el archivo. Items parseados: ${itemsFoundInFile}` });
+    }
+
+    // Si el request incluye requiresPlan en el form-data, aplicarlo a todos los VODs que se crearán
+    try {
+      let providedPlans = null;
+      if (req.body && req.body.requiresPlan) {
+        // Puede venir como JSON string o como lista CSV
+        try {
+          providedPlans = JSON.parse(req.body.requiresPlan);
+        } catch (e) {
+          // Not JSON, try CSV
+          providedPlans = String(req.body.requiresPlan).split(',').map(s => s.trim()).filter(s => s);
+        }
+      }
+      if (Array.isArray(providedPlans) && providedPlans.length > 0) {
+        // Normalizar 'basico' a 'gplay' como en otras partes
+        providedPlans = providedPlans.map(p => p === 'basico' ? 'gplay' : p);
+        // Aplicar a cada item por defecto (no sobrescribe si item ya tiene requiresPlan explícito distinto de default)
+        videosToAdd = videosToAdd.map(v => {
+          try {
+            // Si el VOD tiene requiresPlan con valor distinto al default ['gplay'], respetarlo
+            if (Array.isArray(v.requiresPlan) && v.requiresPlan.length > 0 && !(v.requiresPlan.length === 1 && v.requiresPlan[0] === 'gplay')) {
+              return v;
+            }
+            v.requiresPlan = providedPlans;
+            return v;
+          } catch (e) { return v; }
+        });
+      }
+    } catch (e) {
+      console.warn('CTRL: createBatchVideosFromTextAdmin - No se pudo aplicar requiresPlan del form-data:', e?.message || e);
     }
 
     let vodsAddedCount = 0;
