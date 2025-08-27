@@ -8,7 +8,6 @@ import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
-import { getRecentAdminUploads } from "../controllers/videos.controller.js";
 
 
 
@@ -887,9 +886,6 @@ router.post("/upload-text", verifyToken, isAdmin, multer({
   }
 }).single("file"), createBatchVideosFromTextAdmin);
 
-// GET /api/videos/recent-uploads — listar subidas recientes por tiempo (admin)
-router.get('/recent-uploads', verifyToken, isAdmin, getRecentAdminUploads);
-
 // POST /api/videos/upload-m3u
 router.post("/upload-m3u", verifyToken, isAdmin, upload.single("file"), async (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: "No se proporcionó ningún archivo M3U." });
@@ -1165,74 +1161,6 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res, next) => {
   } catch (error) {
     console.error(`Error en DELETE /api/videos/${req.params.id}:`, error);
     next(error); 
-  }
-});
-
-
-// POST /api/videos/admin/bulk-update-4k
-// Body: { hours: number, applyMainSection: boolean, includePorGenero: boolean, createdByMe: boolean, dryRun: boolean }
-// Seguridad: verifyToken + isAdmin middleware applied
-router.post('/admin/bulk-update-4k', verifyToken, isAdmin, async (req, res, next) => {
-  try {
-    const hours = Math.max(1, parseInt(req.body.hours || '3', 10)); // default 3 hours
-    const applyMainSection = req.body.applyMainSection === true || req.body.applyMainSection === 'true';
-    const includePorGenero = req.body.includePorGenero === true || req.body.includePorGenero === 'true';
-    const createdByMe = req.body.createdByMe === true || req.body.createdByMe === 'true';
-    const dryRun = req.body.dryRun === true || req.body.dryRun === 'true';
-
-    const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
-
-    // Construir condiciones para identificar los VODs 4K
-    const orConditions = [
-      { mainSection: { $regex: /^CINE/i } },
-      { title: { $regex: /4k/i } },
-      { genres: { $in: [/4k/i] } }
-    ];
-
-    if (includePorGenero) {
-      // También incluir VODs que fueron asignados a POR_GENERO (tu caso) dentro del rango
-      orConditions.push({ mainSection: 'POR_GENERO' });
-    }
-
-    const query = { createdAt: { $gte: cutoff }, $or: orConditions };
-
-    // Si solicitó limitar a sus propias subidas, filtrar por user (soportando string u ObjectId)
-    if (createdByMe && req.user && req.user.id) {
-      try {
-        query.user = { $in: [req.user.id, mongoose.Types.ObjectId(req.user.id)] };
-      } catch (e) {
-        query.user = req.user.id;
-      }
-    }
-
-    const matched = await Video.find(query).limit(2000).lean();
-    if (!matched || matched.length === 0) {
-      return res.json({ message: 'No se encontraron VODs en POR_GENERO/4K en el rango especificado.', matched: 0, videos: [] });
-    }
-
-    if (dryRun) {
-      const preview = matched.map(v => ({ id: v._id, title: v.title, mainSection: v.mainSection, user: v.user, createdAt: v.createdAt }));
-      return res.json({ message: `Dry-run: ${preview.length} VODs coincidentes.`, matched: preview.length, videos: preview });
-    }
-
-    const updatePromises = matched.map(v => {
-      try {
-        return Video.findByIdAndUpdate(v._id, {
-          $set: {
-            requiresPlan: ['cinefilo', 'premium'],
-            ...(applyMainSection ? { mainSection: 'CINE_4K' } : {})
-          }
-        }, { new: true });
-      } catch (e) { return null; }
-    });
-
-    const results = await Promise.all(updatePromises);
-    const updatedCount = results.filter(r => r && r._id).length;
-
-    res.json({ message: `Actualizados ${updatedCount} VODs.`, matched: matched.length, updated: updatedCount });
-  } catch (error) {
-    console.error('Error en POST /api/videos/admin/bulk-update-4k:', error);
-    next(error);
   }
 });
 

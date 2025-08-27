@@ -169,7 +169,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
         console.log("CTRL: createBatchVideosFromTextAdmin - Archivo M3U detectado.");
     }
 
-  for (let i = 0; i < lines.length; i++) {
+    for (let i = 0; i < lines.length; i++) {
       const line = lines[i]?.trim();
       if (!line) continue;
 
@@ -363,66 +363,6 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
       return res.status(400).json({ message: `No se encontraron VODs válidos en el archivo. Items parseados: ${itemsFoundInFile}` });
     }
 
-    // Si el request incluye requiresPlan en el form-data, aplicarlo a todos los VODs que se crearán
-    try {
-      let providedPlans = null;
-      if (req.body && req.body.requiresPlan) {
-        // Puede venir como JSON string o como lista CSV
-        try {
-          providedPlans = JSON.parse(req.body.requiresPlan);
-        } catch (e) {
-          // Not JSON, try CSV
-          providedPlans = String(req.body.requiresPlan).split(',').map(s => s.trim()).filter(s => s);
-        }
-      }
-      if (Array.isArray(providedPlans) && providedPlans.length > 0) {
-        // Normalizar 'basico' a 'gplay' como en otras partes
-        providedPlans = providedPlans.map(p => p === 'basico' ? 'gplay' : p);
-        // Aplicar a cada item por defecto (no sobrescribe si item ya tiene requiresPlan explícito distinto de default)
-        videosToAdd = videosToAdd.map(v => {
-          try {
-            // Si el VOD tiene requiresPlan con valor distinto al default ['gplay'], respetarlo
-            if (Array.isArray(v.requiresPlan) && v.requiresPlan.length > 0 && !(v.requiresPlan.length === 1 && v.requiresPlan[0] === 'gplay')) {
-              return v;
-            }
-            v.requiresPlan = providedPlans;
-            return v;
-          } catch (e) { return v; }
-        });
-      }
-    } catch (e) {
-      console.warn('CTRL: createBatchVideosFromTextAdmin - No se pudo aplicar requiresPlan del form-data:', e?.message || e);
-    }
-
-    // Si el admin indicó categoría/subcategoría en el form-data, aplicarla a los VODs parseados
-    try {
-      const providedCategoria = req.body?.categoria;
-      const providedSubcategoria = req.body?.subcategoria;
-      if (providedCategoria) {
-        videosToAdd = videosToAdd.map(v => {
-          try {
-            // Para películas, usar la subcategoría como mainSection (p.ej. CINE_4K)
-            if (providedCategoria === 'pelicula') {
-              v.tipo = 'pelicula';
-              if (providedSubcategoria) v.mainSection = providedSubcategoria;
-              // asegurar que las series no conserven seasons por error
-              if (Array.isArray(v.seasons) && v.seasons.length > 0 && v.tipo === 'pelicula') {
-                v.seasons = [];
-              }
-            }
-            // Para series, aplicar subcategoria si se indicó
-            if (providedCategoria === 'serie') {
-              v.tipo = v.tipo || 'serie';
-              if (providedSubcategoria) v.subcategoria = providedSubcategoria;
-            }
-            return v;
-          } catch (inner) { return v; }
-        });
-      }
-    } catch (e) {
-      console.warn('CTRL: createBatchVideosFromTextAdmin - No se pudo aplicar categoria/subcategoria del form-data:', e?.message || e);
-    }
-
     let vodsAddedCount = 0;
     let vodsSkippedCount = 0;
     const errors = [];
@@ -532,44 +472,6 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
 
   } catch (error) {
     console.error("Error en CTRL:createBatchVideosFromTextAdmin:", error.message, error.stack);
-    next(error);
-  }
-};
-
-// Listar subidas recientes (admin) — útil para revisar/retroceder una carga masiva
-export const getRecentAdminUploads = async (req, res, next) => {
-  try {
-    const minutes = parseInt(req.query.minutes, 10) || 60; // por defecto 60 minutos
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
-    const createdByMe = req.query.createdByMe === 'true' || req.query.createdByMe === true;
-
-    const cutoff = new Date(Date.now() - minutes * 60 * 1000);
-    const query = { createdAt: { $gte: cutoff } };
-    if (createdByMe && req.user && req.user.id) {
-      // Match either the string id or an ObjectId to avoid misses depending on how 'user' was stored
-      try {
-        const uid = req.user.id;
-        query.user = { $in: [uid, mongoose.Types.ObjectId(uid)] };
-      } catch (e) {
-        query.user = req.user.id;
-      }
-    }
-
-    const recent = await Video.find(query).sort({ createdAt: -1 }).limit(limit).lean();
-    // Map minimal para frontend
-    const mapped = recent.map(v => ({
-      id: v._id,
-      title: v.title,
-      tipo: v.tipo,
-      mainSection: v.mainSection,
-      requiresPlan: v.requiresPlan || [],
-      createdAt: v.createdAt,
-      user: v.user || null
-    }));
-
-    res.json({ videos: mapped, count: mapped.length });
-  } catch (error) {
-    console.error('CTRL: getRecentAdminUploads error:', error);
     next(error);
   }
 };

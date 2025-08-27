@@ -286,23 +286,18 @@ export const processM3UAdmin = async (req, res, next) => {
   }
 
   try {
-  let fileContent = req.file.buffer.toString('utf8');
-  // Trim BOM if present and normalize whitespace/line endings
-  if (fileContent.charCodeAt(0) === 0xFEFF) fileContent = fileContent.slice(1);
-  fileContent = fileContent.replace(/\u00A0/g, ' ').replace(/\r\n/g, '\n');
-  const lines = fileContent.split('\n');
-  console.log('CTRL: processM3UAdmin - primeras líneas:', lines.slice(0, 8));
+    const fileContent = req.file.buffer.toString('utf8');
+    const lines = fileContent.split(/\r?\n/);
     let channelsToAdd = [];
     let currentChannel = null; // Usar null para indicar que no hay canal en construcción
 
     // La cabecera #EXTM3U es recomendada, pero podemos ser flexibles si el contenido parece válido.
-    if (!lines[0] || !/^#EXTM3U/i.test(String(lines[0]).trim())) {
+    if (!lines[0].startsWith('#EXTM3U')) {
       console.warn("CTRL: processM3UAdmin - Advertencia: El archivo no comienza con #EXTM3U. Se intentará procesar de todas formas.");
     }
 
-    for (const rawLine of lines) {
-      const line = String(rawLine || '').trim();
-      if (/^#EXTINF:/i.test(line)) {
+    for (const line of lines) {
+      if (line.startsWith('#EXTINF:')) {
         // Si había un canal anterior sin URL, se descarta.
         if (currentChannel) {
           console.log(`CTRL: processM3UAdmin - Se encontró un #EXTINF huérfano (sin URL), descartando canal anterior: ${currentChannel.name}`);
@@ -317,24 +312,18 @@ export const processM3UAdmin = async (req, res, next) => {
           logo: ''
         };
 
-        // Aceptar atributos con comillas dobles o simples y capturar texto tras la coma.
-        const infoMatch = line.match(/#EXTINF:[-0-9]+(?:.*?tvg-id=(?:"|')([^"']*)(?:"|'))?(?:.*?tvg-name=(?:"|')([^"']*)(?:"|'))?(?:.*?tvg-logo=(?:"|')([^"']*)(?:"|'))?(?:.*?group-title=(?:"|')([^"']*)(?:"|'))?\s*,\s*(.*)$/i);
-
+        // Regex mejorado para capturar el nombre del canal y atributos opcionales.
+        // Acepta #EXTINF:-1, #EXTINF:0, etc.
+        const infoMatch = line.match(/#EXTINF:[-0-9]+(?:.*?tvg-id="([^"]*)")?(?:.*?tvg-name="([^"]*)")?(?:.*?tvg-logo="([^"]*)")?(?:.*?group-title="([^"]*)")?,(.+)/);
+        
         if (infoMatch) {
-          const maybeTrailing = infoMatch[5] || '';
-          currentChannel.name = (infoMatch[2] || maybeTrailing || 'Canal Sin Nombre').trim();
+          // Formato completo: #EXTINF:-1 tvg-name="Nombre" group-title="Grupo",Nombre Visible
+          currentChannel.name = (infoMatch[2] || infoMatch[5] || 'Canal Sin Nombre').trim();
           currentChannel.logo = infoMatch[3] || '';
           currentChannel.section = infoMatch[4] || 'General';
-          // Si el texto tras la coma parece una URL, la usamos directamente
-          if (/^(https?:\/\/|rtmp:\/\/|udp:\/\/|\/\/)/i.test(maybeTrailing)) {
-            currentChannel.url = maybeTrailing.trim();
-            channelsToAdd.push(currentChannel);
-            currentChannel = null;
-            continue;
-          }
         } else {
           // Formato simple: #EXTINF:-1,Nombre del Canal
-          const nameMatch = line.match(/#EXTINF:[-0-9]+,(.+)/i);
+          const nameMatch = line.match(/#EXTINF:[-0-9]+,(.+)/);
           if (nameMatch) {
             currentChannel.name = nameMatch[1].trim();
           } else {
@@ -343,13 +332,13 @@ export const processM3UAdmin = async (req, res, next) => {
             continue;
           }
         }
-      } else if (/^#EXTGRP:/i.test(line) && currentChannel) {
+      } else if (line.startsWith('#EXTGRP:') && currentChannel) {
         // Maneja el tag #EXTGRP en una línea separada.
-        const groupMatch = line.match(/^#EXTGRP:(.+)/i);
+        const groupMatch = line.match(/#EXTGRP:(.+)/);
         if (groupMatch) {
           currentChannel.section = groupMatch[1].trim();
         }
-      } else if (line && !line.startsWith('#') && currentChannel && currentChannel.name) {
+      } else if (line.trim() && !line.startsWith('#') && currentChannel && currentChannel.name) {
         // Esta línea debería ser la URL.
         currentChannel.url = line.trim();
         if (currentChannel.name && currentChannel.url) {

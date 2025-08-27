@@ -1,18 +1,19 @@
 import axios from 'axios';
 import mongoose from 'mongoose';
 import Video from '../models/Video.js';
-import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname } from 'path';
 
 // Configurar __dirname en módulos ES
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-dotenv.config({ path: join(__dirname, '..', '.env') });
-
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
+// VALORES INTEGRADOS DIRECTAMENTE EN EL CÓDIGO (NO RECOMENDADO)
+const TMDB_API_KEY = '9a918356a86407beac5efae2a78bf1c4';
+const MONGO_URI = 'mongodb+srv://KillupBlack:Alptraum100%40@teamg.joradno.mongodb.net/teamg_db?retryWrites=true&w=majority';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+let genreMap = {};
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -25,10 +26,40 @@ function parseArgs() {
   return out;
 }
 
-async function searchTMDB(title) {
-  if (!TMDB_API_KEY) return null;
+async function loadGenres() {
   try {
-    const q = encodeURIComponent(title);
+    const url = `${TMDB_BASE_URL}/genre/movie/list?api_key=${TMDB_API_KEY}&language=es-ES`;
+    const res = await axios.get(url, { timeout: 10000 });
+    res.data.genres.forEach(genre => {
+      genreMap[genre.id] = genre.name;
+    });
+    console.log('Mapa de géneros cargado exitosamente.');
+  } catch (err) {
+    console.error('Error fatal: No se pudo cargar el mapa de géneros de TMDB.', err.message);
+    throw err;
+  }
+}
+
+// FUNCIÓN DE LIMPIEZA
+function cleanTitle(title) {
+  if (!title) return '';
+  let cleanedTitle = title.replace(/\s*\([^)]*\)|\s*\[[^\]]*\]/g, '');
+  cleanedTitle = cleanedTitle.replace(/\s*-\s*[A-ZÁÉÍÓÚ\s]+$/, '');
+  cleanedTitle = cleanedTitle.replace(/\s+\d{4}$/, '');
+  cleanedTitle = cleanedTitle.replace(/[;:]$/, '');
+  return cleanedTitle.trim();
+}
+
+// ÚNICA VERSIÓN DE searchTMDB (CORREGIDA)
+async function searchTMDB(title) {
+  const cleanedTitle = cleanTitle(title);
+  if (!cleanedTitle) {
+      console.warn(`Título original '${title}' quedó vacío después de limpiar.`);
+      return null;
+  }
+  
+  try {
+    const q = encodeURIComponent(cleanedTitle);
     const url = `${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${q}&language=es-ES`;
     const res = await axios.get(url, { timeout: 15000 });
     const data = res.data;
@@ -38,7 +69,7 @@ async function searchTMDB(title) {
     }
     return null;
   } catch (err) {
-    console.warn(`TMDB search failed for '${title}':`, err.message);
+    console.warn(`TMDB search failed for '${cleanedTitle}' (original: '${title}'):`, err.message);
     return null;
   }
 }
@@ -46,19 +77,21 @@ async function searchTMDB(title) {
 async function main() {
   const { dryRun, limit } = parseArgs();
   try {
-    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    if (!mongoUri) throw new Error('MONGO_URI not found in .env');
-    if (!TMDB_API_KEY) throw new Error('TMDB_API_KEY not set in .env');
-
-    console.log(`updateTMDBInfo_limited - Connecting to MongoDB (${dryRun ? 'dry-run' : 'apply'})`);
-    await mongoose.connect(mongoUri, { connectTimeoutMS: 10000 });
+    console.log(`updateTMDBInfo - Connecting to MongoDB (${dryRun ? 'dry-run' : 'apply'})`);
+    await mongoose.connect(MONGO_URI, { connectTimeoutMS: 10000 });
     console.log('Connected to MongoDB');
+
+    await loadGenres();
 
     const query = {
       $or: [
         { tmdbRating: { $exists: false } },
-        { tmdbRating: null },
-        { tmdbRating: '' }
+        { description: { $exists: false } },
+        { genres: { $exists: false } },
+        { thumbnail: { $exists: false } },
+        { description: '' },
+        { genres: '' },
+        { thumbnail: '' },
       ]
     };
 
@@ -82,14 +115,21 @@ async function main() {
 
       const rating = tm.vote_average ?? null;
       const posterPath = tm.poster_path ? `https://image.tmdb.org/t/p/w500${tm.poster_path}` : (tm.backdrop_path ? `https://image.tmdb.org/t/p/w500${tm.backdrop_path}` : null);
+      
+      const description = tm.overview || null;
+      const genreNames = tm.genre_ids?.map(id => genreMap[id]).filter(Boolean).join(', ') || null;
 
       const updates = {};
-      if ((video.tmdbRating === undefined || video.tmdbRating === null || video.tmdbRating === '') && rating != null) updates.tmdbRating = rating;
-      if ((!video.thumbnail || video.thumbnail === '') && posterPath) updates.thumbnail = posterPath;
-      if ((!video.tmdbThumbnail || video.tmdbThumbnail === '') && posterPath) updates.tmdbThumbnail = posterPath;
+      if ((video.tmdbRating === undefined || video.tmdbRating === null) && rating != null) updates.tmdbRating = rating;
+      if (!video.thumbnail && posterPath) updates.thumbnail = posterPath;
+      if (!video.tmdbThumbnail && posterPath) updates.tmdbThumbnail = posterPath;
+      if (!video.description && description) updates.description = description;
+      if ((!video.genres || video.genres.length === 0) && genreNames) updates.genres = genreNames;
+
+
 
       if (Object.keys(updates).length === 0) {
-        console.log(`  -> Nothing to update for '${title}'. rating=${rating}`);
+        console.log(`  -> Nothing to update for '${title}'.`);
         continue;
       }
 
@@ -103,13 +143,13 @@ async function main() {
           console.error(`Failed to update _id=${video._id}:`, uErr.message);
         }
       }
-      // Be polite with TMDB
+      
       await new Promise(r => setTimeout(r, 400));
     }
 
     console.log(`Finished processing ${processed} candidate(s).`);
   } catch (err) {
-    console.error('Error in updateTMDBInfo_limited:', err.message);
+    console.error('Error in updateTMDBInfo:', err.message);
   } finally {
     try { await mongoose.disconnect(); } catch (e) {}
   }

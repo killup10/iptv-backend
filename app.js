@@ -22,10 +22,10 @@ const app = express();
 
 // CORS configurado explícitamente para permitir PUT con application/json y headers usados por el frontend
 const corsOptions = {
-  origin: true, // refleja el origen
+  origin: 'https://play.teamg.store',
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id'],
-  credentials: false,
+  credentials: true,
   maxAge: 86400
 };
 
