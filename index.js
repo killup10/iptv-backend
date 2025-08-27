@@ -2,8 +2,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import fetch from "node-fetch";
 import express from "express";
-import cors from "cors";
-import app from "./app.js";
+import app from "./app.js"; // app ya viene con CORS configurado desde app.js
 import authRoutes from "./routes/auth.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -97,22 +96,17 @@ app.use("/api/channels", channelsRoutes);
 app.use("/api/devices", deviceRoutes);
 app.use("/api/capitulos", capitulosRoutes);
 
-
-
 // --- Funciones de limpieza automática de dispositivos ---
 const runDeviceCleanup = async () => {
   try {
     console.log('🧹 Ejecutando limpieza automática de dispositivos...');
     
-    // Desactivar dispositivos obsoletos (más de 7 días sin actividad)
     const staleResult = await Device.deactivateStale(7);
     console.log(`✅ ${staleResult.modifiedCount} dispositivos obsoletos desactivados`);
     
-    // Eliminar dispositivos inactivos antiguos (más de 30 días)
     const cleanupResult = await Device.cleanupInactive(30);
     console.log(`✅ ${cleanupResult.deletedCount} dispositivos inactivos eliminados`);
     
-    // Estadísticas
     const totalActive = await Device.countDocuments({ isActive: true });
     const totalInactive = await Device.countDocuments({ isActive: false });
     console.log(`📊 Dispositivos activos: ${totalActive}, inactivos: ${totalInactive}`);
@@ -124,12 +118,10 @@ const runDeviceCleanup = async () => {
 
 // Programar limpieza automática cada 6 horas
 const scheduleDeviceCleanup = () => {
-  const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000; // 6 horas en milisegundos
+  const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000;
   
-  // Ejecutar limpieza inicial después de 5 minutos del inicio del servidor
   setTimeout(runDeviceCleanup, 5 * 60 * 1000);
   
-  // Programar limpieza periódica
   setInterval(runDeviceCleanup, CLEANUP_INTERVAL);
   
   console.log('⏰ Limpieza automática de dispositivos programada cada 6 horas');
@@ -141,11 +133,8 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB conectado");
     
-    // Iniciar servidor
     app.listen(PORT, () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-      
-      // Programar limpieza automática de dispositivos
       scheduleDeviceCleanup();
     });
   })
