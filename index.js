@@ -16,33 +16,6 @@ import Device from "./models/Device.js";
 
 dotenv.config();
 
-// --- CORS ---
-const allowedOrigins = [
-  "https://iptv-frontend-iota.vercel.app",
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-  "https://play.teamg.store"
-];
-console.log("Orígenes permitidos para CORS:", allowedOrigins);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Para Electron o Postman
-    const trimmedOrigin = origin.trim();
-    if (allowedOrigins.includes(trimmedOrigin)) {
-      console.log(`CORS: Origen permitido: ${trimmedOrigin}`);
-      return callback(null, true);
-    } else {
-      console.warn(`CORS: Origen NO PERMITIDO: '${trimmedOrigin}'`);
-      return callback(new Error(`El origen '${trimmedOrigin}' no está permitido por CORS.`));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
-
 // Configuración de límites y timeouts
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
