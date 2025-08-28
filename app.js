@@ -1,81 +1,122 @@
-// iptv-backend/app.js
-
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// Import all your route handlers
 import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import adminContentRoutes from './routes/adminContent.routes.js';
-import channelsRoutes from './routes/channels.routes.js';
+import channelRoutes from './routes/channels.routes.js';
 import videosRoutes from './routes/videos.routes.js';
 import m3uRoutes from './routes/m3u.routes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import vodManagementRoutes from './routes/vodManagement.routes.js';
 import migrationRoutes from './routes/migration.routes.js';
 import progressRoutes from './routes/progress.routes.js';
+import deviceRoutes from './routes/device.routes.js'; // Assuming you have this from your repo
 
+// --- BASIC SETUP ---
+dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
 
-// --- CONFIGURACIÓN DE CORS ACTUALIZADA ---
+// --- CORS CONFIGURATION (APPLY BEFORE ALL ROUTES) ---
 const allowedOrigins = [
-  // Orígenes para la web y desarrollo
-  "https://iptv-frontend-iota.vercel.app",
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:3000",
-  "https://play.teamg.store",
+  // Development environments
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
 
-  // Orígenes para la aplicación móvil (APK/Capacitor)
-  "http://localhost",
-  "capacitor://localhost"
+  // Production Frontend URLs
+  'https://play.teamg.store',
+  'https://iptv-frontend-iota.vercel.app', // Old Vercel URL (can be kept for now)
+  
+  // IMPORTANT: Add your new Cloudflare URL here
+  'https://YOUR-CLOUDFLARE-APP-NAME.pages.dev', // <-- REPLACE THIS
+
+  // Mobile App (Capacitor) origins
+  'http://localhost',
+  'capacitor://localhost',
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origen (como Postman o apps nativas) y las de la lista
+    // Allow requests with no origin (like mobile apps or curl requests)
+    // and requests from whitelisted origins
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      callback(new Error('No permitido por CORS'));
+      callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id'],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 204 // For legacy browser support
 };
 
+// Apply CORS middleware to all incoming requests
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Habilitar respuesta para pre-flight
-// --- FIN DE LA CONFIGURACIÓN DE CORS ---
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Explicitly handle pre-flight requests for all routes
+app.options('*', cors(corsOptions));
+// --- END OF CORS CONFIGURATION ---
 
+
+// --- MIDDLEWARE SETUP ---
+// Increase payload size limits for large requests like M3U uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Rutas
+
+// --- API ROUTES ---
+// Health check route to verify the server is running
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    service: 'iptv-backend',
+    status: 'running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Register all your application routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/content', adminContentRoutes);
-app.use('/api/channels', channelsRoutes);
+app.use('/api/channels', channelRoutes);
 app.use('/api/videos', videosRoutes);
 app.use('/api/m3u', m3uRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/manage-vod', vodManagementRoutes);
-app.use('/api/admin', migrationRoutes);
+app.use('/api/admin', migrationRoutes); // Note: might conflict with other /api/admin routes if paths overlap
 app.use('/api/progress', progressRoutes);
+app.use('/api/devices', deviceRoutes); // Assuming you have device management routes
 
-// Manejador de errores global
+
+// --- GLOBAL ERROR HANDLER ---
+// This should be the last middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('An unexpected error occurred:', err.stack);
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Error interno del servidor'
+    message: err.message || 'Internal Server Error'
   });
 });
 
 export default app;
+```
+
+### Próximos Pasos:
+
+1.  **Reemplaza** el contenido de tu archivo `app.js` en el repositorio `iptv-backend` con este código.
+2.  **Actualiza la URL de Cloudflare:** Cambia la línea `'https://YOUR-CLOUDFLARE-APP-NAME.pages.dev'` por la URL real de tu frontend.
+3.  **Sube los cambios y despliega** tu backend en Render.com.
+
+Una vez que el backend se reinicie con esta configuración, tu aplicación móvil y web deberían poder conectarse sin el "error de re
