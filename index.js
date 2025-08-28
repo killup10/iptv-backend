@@ -2,7 +2,8 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import fetch from "node-fetch";
 import express from "express";
-import app from "./app.js"; // app ya viene con CORS configurado desde app.js
+import cors from "cors";
+import app from "./app.js"; // app ya viene con CORS configurado desde app.js (pero forzamos configuración segura aquí)
 import authRoutes from "./routes/auth.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -15,9 +16,46 @@ import Device from "./models/Device.js";
 
 dotenv.config();
 
+// ---------- CORS: configuración explícita (asegura preflight y headers personalizados) ----------
+const allowedOrigins = [
+  process.env.FRONTEND_URL || "https://play.teamg.store",
+  "https://www.play.teamg.store",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // origin == undefined sucede en requests same-origin o herramientas (curl/postman)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("Origen no permitido por CORS: " + origin));
+    }
+  },
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "x-device-id",
+    "device-id",
+    "X-Requested-With",
+    "Accept"
+  ],
+  exposedHeaders: ["Content-Length"],
+  credentials: false,
+  optionsSuccessStatus: 204,
+  maxAge: 600
+};
+
+// Aplica CORS globalmente y responde a preflight OPTIONS
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 // Configuración de límites y timeouts
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Aumentar timeout para las conexiones
 app.use((req, res, next) => {
@@ -36,9 +74,9 @@ app.get("/img-proxy", async (req, res) => {
 
     const response = await fetch(decodedUrl, {
       headers: {
-        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0"
+        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
       },
-      timeout: 10000
+      timeout: 10000,
     });
 
     if (!response.ok) {
@@ -65,7 +103,7 @@ app.get("/proxy", async (req, res) => {
 
     const response = await fetch(decodedUrl, {
       headers: { "User-Agent": "Mozilla/5.0" },
-      timeout: 20000
+      timeout: 20000,
     });
 
     if (!response.ok) {
@@ -99,46 +137,46 @@ app.use("/api/capitulos", capitulosRoutes);
 // --- Funciones de limpieza automática de dispositivos ---
 const runDeviceCleanup = async () => {
   try {
-    console.log('🧹 Ejecutando limpieza automática de dispositivos...');
-    
+    console.log("🧹 Ejecutando limpieza automática de dispositivos...");
+
     const staleResult = await Device.deactivateStale(7);
     console.log(`✅ ${staleResult.modifiedCount} dispositivos obsoletos desactivados`);
-    
+
     const cleanupResult = await Device.cleanupInactive(30);
     console.log(`✅ ${cleanupResult.deletedCount} dispositivos inactivos eliminados`);
-    
+
     const totalActive = await Device.countDocuments({ isActive: true });
     const totalInactive = await Device.countDocuments({ isActive: false });
     console.log(`📊 Dispositivos activos: ${totalActive}, inactivos: ${totalInactive}`);
-    
   } catch (error) {
-    console.error('❌ Error en limpieza automática de dispositivos:', error);
+    console.error("❌ Error en limpieza automática de dispositivos:", error);
   }
 };
 
 // Programar limpieza automática cada 6 horas
 const scheduleDeviceCleanup = () => {
   const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000;
-  
+
   setTimeout(runDeviceCleanup, 5 * 60 * 1000);
-  
+
   setInterval(runDeviceCleanup, CLEANUP_INTERVAL);
-  
-  console.log('⏰ Limpieza automática de dispositivos programada cada 6 horas');
+
+  console.log("⏰ Limpieza automática de dispositivos programada cada 6 horas");
 };
 
 // --- MongoDB ---
 const PORT = process.env.PORT || 3000;
-mongoose.connect(process.env.MONGO_URI)
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB conectado");
-    
+
     app.listen(PORT, () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
       scheduleDeviceCleanup();
     });
   })
-  .catch(err => {
+  .catch((err) => {
     console.error("❌ Error crítico con MongoDB:", err);
     process.exit(1);
   });

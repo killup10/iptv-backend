@@ -20,29 +20,34 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// --- CONFIGURACIÓN DE CORS CENTRALIZADA ---
+// --- CONFIGURACIÓN DE CORS ACTUALIZADA ---
 const allowedOrigins = [
+  // Orígenes para la web y desarrollo
   "https://iptv-frontend-iota.vercel.app",
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:3000",
-  "https://play.teamg.store"
+  "https://play.teamg.store",
+
+  // Orígenes para la aplicación móvil (APK/Capacitor)
+  "http://localhost",
+  "capacitor://localhost"
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
+    // Permitir solicitudes sin origen (como Postman o apps nativas) y las de la lista
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('No permitido por CORS'));
     }
   },
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id'],
   credentials: true
 };
 
-// Aplicar middleware de CORS a todas las rutas
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Habilitar respuesta para pre-flight
 // --- FIN DE LA CONFIGURACIÓN DE CORS ---
