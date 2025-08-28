@@ -34,8 +34,8 @@ const allowedOrigins = [
   'https://play.teamg.store',
   'https://iptv-frontend-iota.vercel.app', // Old Vercel URL (can be kept for now)
   
-  // IMPORTANT: Add your new Cloudflare URL here
-  'https://YOUR-CLOUDFLARE-APP-NAME.pages.dev', // <-- REPLACE THIS
+  // Cloudflare URL from your screenshot
+  'https://iptv-frontend-clean.pages.dev',
 
   // Mobile App (Capacitor) origins
   'http://localhost',
@@ -111,12 +111,3 @@ app.use((err, req, res, next) => {
 });
 
 export default app;
-```
-
-### Próximos Pasos:
-
-1.  **Reemplaza** el contenido de tu archivo `app.js` en el repositorio `iptv-backend` con este código.
-2.  **Actualiza la URL de Cloudflare:** Cambia la línea `'https://YOUR-CLOUDFLARE-APP-NAME.pages.dev'` por la URL real de tu frontend.
-3.  **Sube los cambios y despliega** tu backend en Render.com.
-
-Una vez que el backend se reinicie con esta configuración, tu aplicación móvil y web deberían poder conectarse sin el "error de re
