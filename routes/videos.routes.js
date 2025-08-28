@@ -112,7 +112,7 @@ router.get("/public/featured-movies", async (req, res, next) => {
       mainSection: v.mainSection || "",
   // Provide absolute URLs and include alternate image fields for the frontend
   // Priorizar la miniatura personalizada (customThumbnail) sobre logo (TMDB)
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
   logo: makeFullUrl(req, v.logo || ''),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -154,7 +154,7 @@ router.get("/public/featured-series", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Priorizar customThumbnail para que la imagen pegada en Admin se muestre primero
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
       logo: makeFullUrl(req, v.logo || ''),
       customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
       tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -196,7 +196,7 @@ router.get("/public/featured-animes", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Priorizar customThumbnail aquí también
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
   ratingDisplay: finalDisplay,
   ratingLabel: finalLabel,
@@ -227,7 +227,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(doramas.map(mapVODToPublicFormat));
@@ -254,7 +254,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(novelas.map(mapVODToPublicFormat));
@@ -281,88 +281,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(documentales.map(mapVODToPublicFormat));
-  } catch (error) {
-    console.error("Error en BACKEND /public/featured-documentales:", error.message);
-    next(error);
-  }
-});
-
-router.get("/public/featured-doramas", async (req, res, next) => {
-  try {
-    const criteria = { 
-      tipo: "dorama", 
-      isFeatured: true, 
-      active: true 
-    };
-    const doramas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(doramas.map(mapVODToPublicFormat));
-  } catch (error) {
-    console.error("Error en BACKEND /public/featured-doramas:", error.message);
-    next(error);
-  }
-});
-
-router.get("/public/featured-novelas", async (req, res, next) => {
-  try {
-    const criteria = { 
-      tipo: "novela", 
-      isFeatured: true, 
-      active: true 
-    };
-    const novelas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(novelas.map(mapVODToPublicFormat));
-  } catch (error) {
-    console.error("Error en BACKEND /public/featured-novelas:", error.message);
-    next(error);
-  }
-});
-
-router.get("/public/featured-documentales", async (req, res, next) => {
-  try {
-    const criteria = { 
-      tipo: "documental", 
-      isFeatured: true, 
-      active: true 
-    };
-    const documentales = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-      thumbnail: v.logo || v.customThumbnail || v.tmdbThumbnail || "/img/placeholder-default.png",
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(documentales.map(mapVODToPublicFormat));
@@ -669,7 +588,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       title: v.title,
   // Priorizar logo (si es un path/url vertical), luego customThumbnail (URL pegada por admin), luego tmdbThumbnail
   // Priorizar customThumbnail al mapear para usuarios
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.logo || v.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: v.customThumbnail || v.logo || v.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
@@ -995,7 +914,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
   customThumbnail: makeFullUrl(req, video.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, video.tmdbThumbnail || ''),
   // Computed thumbnail that the frontend should use (custom > logo > tmdb)
-  thumbnail: makeFullUrl(req, video.customThumbnail || video.logo || video.tmdbThumbnail || "/img/placeholder-default.png"),
+  thumbnail: video.customThumbnail || video.logo || video.tmdbThumbnail || makeFullUrl(req, "/img/placeholder-default.png"),
           trailerUrl: video.trailerUrl,
           seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
             seasonNumber: s.seasonNumber,
