@@ -27,12 +27,35 @@ const allowedOrigins = [
 const corsOptions = {
   origin: function (origin, callback) {
     // origin == undefined sucede en requests same-origin o herramientas (curl/postman)
+    // Allow requests with no origin (same-origin or direct tools)
     if (!origin) return callback(null, true);
+
+    // Debug log for incoming origins
+    console.log('CORS origin check (index):', origin);
+
+    // Direct whitelist match
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
-    } else {
-      return callback(new Error("Origen no permitido por CORS: " + origin));
     }
+
+    // Allow common mobile/webview/app schemes
+    if (origin.startsWith('file:') || origin.startsWith('capacitor:') || origin.startsWith('ionic:') || origin.startsWith('android-webview:')) {
+      return callback(null, true);
+    }
+
+    // Allow subdomains of trusted hosts
+    try {
+      const parsed = new URL(origin);
+      const hostname = parsed.hostname || '';
+      if (hostname.endsWith('teamg.store') || hostname.endsWith('pages.dev') || hostname.endsWith('vercel.app')) {
+        return callback(null, true);
+      }
+    } catch (err) {
+      // Non-URL origin, continue to block
+    }
+
+    console.warn('CORS blocked origin (index):', origin);
+    return callback(new Error('Origen no permitido por CORS: ' + origin));
   },
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
   allowedHeaders: [

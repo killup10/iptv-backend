@@ -45,12 +45,36 @@ const allowedOrigins = [
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    // and requests from whitelisted origins
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    if (!origin) {
+      return callback(null, true);
     }
+
+    // Helpful debug logging for incoming origins
+    console.log('CORS origin check:', origin);
+
+    // Direct whitelist match
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+
+    // Allow file:// origins (common for mobile WebViews / Capacitor / Cordova) and common app schemes
+    if (origin.startsWith('file:') || origin.startsWith('ionic:') || origin.startsWith('android-webview:') || origin.startsWith('capacitor:')) {
+      return callback(null, true);
+    }
+
+    // Allow subdomains of trusted hosts (e.g., *.teamg.store, *.pages.dev)
+    try {
+      const parsed = new URL(origin);
+      const hostname = parsed.hostname || '';
+      if (hostname.endsWith('teamg.store') || hostname.endsWith('pages.dev') || hostname.endsWith('vercel.app')) {
+        return callback(null, true);
+      }
+    } catch (err) {
+      // If origin is not a valid URL, continue to block below
+    }
+
+    console.warn('CORS blocked origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
   },
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id'],
