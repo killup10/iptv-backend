@@ -301,21 +301,40 @@ router.get("/main-sections", verifyToken, async (req, res, next) => {
       { key: "CINE_60FPS", displayName: "CINE 60 FPS", thumbnailSample: "/img/placeholders/cine_60fps.jpg", requiresPlan: "premium", order: 4 },
     ];
 
-    const allSections = [...ALL_POSSIBLE_SECTIONS];
+    const sectionKeys = ALL_POSSIBLE_SECTIONS
+      .map(s => s.key)
+      .filter(key => key !== "POR_GENERO");
 
-    for (let section of allSections) {
-      if (section.key !== "POR_GENERO") {
-        const randomMovieForThumb = await Video.findOne({
-          mainSection: section.key,
+    const thumbnails = await Video.aggregate([
+      {
+        $match: {
+          mainSection: { $in: sectionKeys },
           active: true,
           logo: { $ne: null, $ne: "" }
-        }).sort({ createdAt: -1 });
-
-        if (randomMovieForThumb && randomMovieForThumb.logo) {
-          section.thumbnailSample = randomMovieForThumb.logo;
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      },
+      {
+        $group: {
+          _id: "$mainSection",
+          latestLogo: { $first: "$logo" }
         }
       }
-    }
+    ]);
+
+    const thumbnailMap = thumbnails.reduce((acc, thumb) => {
+      acc[thumb._id] = thumb.latestLogo;
+      return acc;
+    }, {});
+
+    const allSections = ALL_POSSIBLE_SECTIONS.map(section => {
+      if (thumbnailMap[section.key]) {
+        return { ...section, thumbnailSample: thumbnailMap[section.key] };
+      }
+      return section;
+    });
 
     console.log(`BACKEND /main-sections - Mostrando todas las secciones (sin filtrar por plan): ${allSections.map(s => s.key).join(', ')}`);
     res.json(allSections.sort((a, b) => a.order - b.order));
