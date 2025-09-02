@@ -63,6 +63,8 @@ channelSchema.pre('save', function(next) {
   next();
 });
 
-channelSchema.index({ section: 1, active: 1 });
+// Índice optimizado para la consulta principal de canales públicos.
+// Cubre el filtrado por visibilidad, estado, sección y el ordenamiento por nombre.
+channelSchema.index({ active: 1, isPubliclyVisible: 1, section: 1, name: 1 });
 
 export default mongoose.model('Channel', channelSchema);

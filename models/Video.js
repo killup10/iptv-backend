@@ -141,4 +141,8 @@ videoSchema.index({ mainSection: 1, tipo: 1, active: 1 });
 videoSchema.index({ tipo: 1, active: 1, requiresPlan: 1 });
 videoSchema.index({ mainSection: 1, active: 1, requiresPlan: 1 });
 
+// Índices compuestos para optimizar el rendimiento de la carga de VODs por sección y ordenamiento
+videoSchema.index({ active: 1, tipo: 1, createdAt: -1 }); // Para ordenamiento por defecto (recientes)
+videoSchema.index({ active: 1, tipo: 1, title: 1 }); // Para ordenamiento alfabético
+
 export default mongoose.model("Video", videoSchema);
