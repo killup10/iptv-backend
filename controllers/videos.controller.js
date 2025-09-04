@@ -610,20 +610,29 @@ export const updateVideoAdmin = async (req, res, next) => {
       // Las películas no tienen temporadas.
       videoToUpdate.seasons = [];
     }
-    // Si el admin dejó 'requiresPlan' vacío al editar, asegurar al menos 'gplay' para que el contenido sea visible
-    try {
-      if (!Array.isArray(videoToUpdate.requiresPlan) || videoToUpdate.requiresPlan.length === 0) {
-        videoToUpdate.requiresPlan = ['gplay'];
+    // --- LÓGICA DE NEGOCIO PARA PLANES REQUERIDOS ---
+    // Se aplican las reglas de negocio para los planes de las películas según su sección.
+    // Esto sobreescribe cualquier selección manual para garantizar consistencia.
+    if (videoToUpdate.tipo === 'pelicula') {
+      const mainSec = videoToUpdate.mainSection || '';
+      if (mainSec === 'CINE_4K' || mainSec === 'CINE_60FPS') {
+        // Regla: 4K y 60FPS son solo para los planes más altos.
+        videoToUpdate.requiresPlan = ['cinefilo', 'premium'];
+      } else if (mainSec.startsWith('CINE')) {
+        // Regla: Otras secciones de CINE (Estrenos, etc.) son para todos excepto gplay.
+        videoToUpdate.requiresPlan = ['estandar', 'sports', 'cinefilo', 'premium'];
+      } else if (mainSec === 'POR_GENERO') {
+        // Regla: Películas por género son para todos excepto gplay.
+        videoToUpdate.requiresPlan = ['estandar', 'sports', 'cinefilo', 'premium'];
       }
-    } catch (rpErr) {
-      console.warn('[updateVideoAdmin] No se pudo normalizar requiresPlan:', rpErr?.message || rpErr);
     }
-      // Si la película está en una sección de CINE y es película forzar requiresPlan
-      try {
-        if (videoToUpdate.tipo === 'pelicula' && typeof videoToUpdate.mainSection === 'string' && videoToUpdate.mainSection.startsWith('CINE')) {
-          videoToUpdate.requiresPlan = ['estandar','sports','cinefilo','premium'];
-        }
-      } catch (e) { /* ignore */ }
+
+    // Fallback de seguridad: si después de la lógica anterior, un video (que no sea película o
+    // una película en una sección no cubierta) se queda sin plan, se le asigna 'gplay'
+    // para evitar que quede inaccesible por error.
+    if (!videoToUpdate.requiresPlan || videoToUpdate.requiresPlan.length === 0) {
+      videoToUpdate.requiresPlan = ['gplay'];
+    }
     
     const updatedVideo = await videoToUpdate.save();
     console.log(`[updateVideoAdmin] Video ${id} actualizado exitosamente.`);
