@@ -546,7 +546,12 @@ router.get("/", verifyToken, async (req, res, next) => {
       query.active = true;
     }
 
-    if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") query.mainSection = req.query.mainSection;
+        if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") {
+      query.mainSection = req.query.mainSection;
+    } else {
+      // If mainSection is not provided or is "POR_GENERO", exclude specific mainSections
+      query.mainSection = { $nin: ["CINE_2025", "CINE_4K", "CINE_60FPS"] };
+    }
     if (req.query.genre && req.query.genre !== "Todas") query.genres = req.query.genre;
     if (req.query.subcategoria && req.query.subcategoria !== "TODOS") query.subcategoria = req.query.subcategoria;
     
@@ -573,7 +578,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     
     // Lógica de paginación
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20; // Límite por defecto
+    const limit = parseInt(req.query.limit) || 3000; // Límite por defecto
     const skip = (page - 1) * limit;
 
     // Determinar opción de ordenamiento
