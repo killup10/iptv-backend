@@ -21,14 +21,17 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || "https://play.teamg.store",
   "https://www.play.teamg.store",
   "http://localhost:3000",
+  "https://localhost",
+  "https://127.0.0.1",
   "http://127.0.0.1:3000"
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
     // origin == undefined sucede en requests same-origin o herramientas (curl/postman)
-    // Allow requests with no origin (same-origin or direct tools)
-    if (!origin) return callback(null, true);
+  // Allow requests with no origin (same-origin or direct tools)
+  // Also accept the literal string 'null' which some WebViews send
+  if (!origin || origin === 'null') return callback(null, true);
 
     // Debug log for incoming origins
     console.log('CORS origin check (index):', origin);
@@ -43,10 +46,15 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Allow subdomains of trusted hosts
+    // Allow subdomains of trusted hosts and localhost
     try {
       const parsed = new URL(origin);
       const hostname = parsed.hostname || '';
+
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return callback(null, true);
+      }
+
       if (hostname.endsWith('teamg.store') || hostname.endsWith('pages.dev') || hostname.endsWith('vercel.app')) {
         return callback(null, true);
       }

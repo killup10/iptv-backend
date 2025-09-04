@@ -1,81 +1,83 @@
 import { MongoClient } from 'mongodb';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // --- CONFIGURACIÓN ---
-// Tu cadena de conexión ya está incluida aquí. No necesitas hacer nada más.
-const MONGODB_URI = "mongodb+srv://KillupBlack:Alptraum100%40@teamg.joradno.mongodb.net/teamg_db?retryWrites=true&w=majority";
-
-if (!MONGODB_URI) {
-    console.error('La cadena de conexión MONGODB_URI es necesaria.');
-    process.exit(1);
-}
-
-// Mapeo para corregir y unificar géneros a un formato estándar en español
+// Mapeo mejorado para corregir acentos y unificar géneros en español.
 const correctionMap = {
     'accion': 'Acción',
-    'action': 'Acción',
+    'action': 'Acción', // Unificar inglés y español
+    'adventure': 'Aventura', // Unificar inglés y español
     'aventura': 'Aventura',
-    'adventure': 'Aventura',
     'animacion': 'Animación',
-    'animation': 'Animación',
+    'animation': 'Animación', // Unificar
     'ciencia ficcion': 'Ciencia Ficción',
-    'science fiction': 'Ciencia Ficción',
+    'science fiction': 'Ciencia Ficción', // Unificar
     'comedia': 'Comedia',
-    'comedy': 'Comedia',
+    'comedy': 'Comedia', // Unificar
     'crimen': 'Crimen',
-    'crime': 'Crimen',
+    'crime': 'Crimen', // Unificar
     'documental': 'Documental',
-    'documentary': 'Documental',
+    'documentary': 'Documental', // Unificar
     'drama': 'Drama',
     'familia': 'Familia',
-    'family': 'Familia',
+    'family': 'Familia', // Unificar
     'fantasia': 'Fantasía',
-    'fantasy': 'Fantasía',
+    'fantasy': 'Fantasía', // Unificar
     'historia': 'Historia',
-    'history': 'Historia',
+    'history': 'Historia', // Unificar
     'terror': 'Terror',
-    'horror': 'Terror',
+    'horror': 'Terror', // Unificar
     'musica': 'Música',
-    'music': 'Música',
+    'music': 'Música', // Unificar
     'misterio': 'Misterio',
-    'mystery': 'Misterio',
+    'mystery': 'Misterio', // Unificar
     'romance': 'Romance',
     'suspenso': 'Suspenso',
-    'suspense': 'Suspenso',
+    'suspense': 'Suspenso', // Unificar
     'thriller': 'Thriller',
     'guerra': 'Guerra',
-    'war': 'Guerra',
+    'war': 'Guerra', // Unificar
     'belico': 'Bélico',
     'pelicula de tv': 'Película de TV',
-    'tv movie': 'Película de TV',
-    'western': 'Western',
-    'kids': 'Kids',
-    'familiar': 'Familiar'
+    'tv movie': 'Película de TV', // Unificar
+    'western': 'Western', // Estandarizar
 };
 
-// Función que toma un género y lo devuelve corregido y estandarizado
+// --- FUNCIÓN DE NORMALIZACIÓN ---
 function normalizeGenre(genre) {
     if (typeof genre !== 'string' || !genre.trim()) {
         return null;
     }
-    const cleanedGenre = genre.trim().toLowerCase();
-    
+    // 1. Limpiar y convertir a minúsculas
+    let cleanedGenre = genre.trim().toLowerCase();
+
+    // 2. Aplicar correcciones del mapa
     if (correctionMap[cleanedGenre]) {
         return correctionMap[cleanedGenre];
     }
-    
-    // Si no está en el mapa, simplemente capitaliza la primera letra
+
+    // 3. Si no está en el mapa, simplemente capitalizar la primera letra
     return cleanedGenre.charAt(0).toUpperCase() + cleanedGenre.slice(1);
 }
 
 // --- SCRIPT PRINCIPAL ---
 async function runNormalization() {
-    const client = new MongoClient(MONGODB_URI);
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+        console.error("Error: La variable de entorno MONGODB_URI no está definida.");
+        return;
+    }
+
+    const client = new MongoClient(uri);
 
     try {
         await client.connect();
         const database = client.db('teamg_db'); 
         const videos = database.collection('videos');
-        console.log("✅ Conectado a MongoDB.");
+
+        console.log("✅ Conectado a la base de datos. Obteniendo videos...");
 
         const allVideos = await videos.find({}).toArray();
         console.log(`🔎 Encontrados ${allVideos.length} documentos para procesar.`);
@@ -97,10 +99,14 @@ async function runNormalization() {
             
             // Normalizar el array 'genres' (si existe y es un array)
             if (Array.isArray(video.genres) && video.genres.length > 0) {
-                const normalizedGenres = video.genres.map(normalizeGenre).filter(g => g); // Limpia nulos
-                const uniqueNormalizedGenres = [...new Set(normalizedGenres)]; // Elimina duplicados
+                const normalizedGenres = video.genres
+                    .map(normalizeGenre) // Normaliza cada género
+                    .filter(g => g !== null); // Elimina nulos o vacíos
 
-                // Compara si el array procesado es diferente al original
+                // Eliminar duplicados
+                const uniqueNormalizedGenres = [...new Set(normalizedGenres)];
+
+                // Comprobar si hubo cambios reales en el array
                 if (JSON.stringify(uniqueNormalizedGenres) !== JSON.stringify(video.genres)) {
                     updateFields.genres = uniqueNormalizedGenres;
                     needsUpdate = true;
@@ -122,14 +128,14 @@ async function runNormalization() {
             const result = await videos.bulkWrite(bulkOperations);
             console.log(`✅ ¡Éxito! Documentos actualizados: ${result.modifiedCount}`);
         } else {
-            console.log("👍 No se encontraron documentos que necesiten actualización. ¡Todo está en orden!");
+            console.log("👍 No se encontraron documentos que necesiten actualización. ¡Tus géneros ya están limpios!");
         }
 
     } catch (err) {
-        console.error("❌ Ocurrió un error:", err);
+        console.error("❌ Ocurrió un error durante el proceso:", err);
     } finally {
         await client.close();
-        console.log("🚪 Conexión a MongoDB cerrada.");
+        console.log("🚪 Conexión a la base de datos cerrada.");
     }
 }
 

@@ -1,6 +1,7 @@
 import UserProgress from '../models/UserProgress.js';
 import Video from '../models/Video.js';
 import mongoose from 'mongoose';
+import { recordTrialUsage } from '../middlewares/trialAccess.js';
 
 export const getProgress = async (req, res) => {
   try {
@@ -28,6 +29,19 @@ export const updateProgress = async (req, res) => {
   if (!videoId) return res.status(400).json({ message: 'videoId is required' });
 
   try {
+    // Registrar uso de prueba
+    if (req.user && lastTime !== undefined) {
+      const existingProgress = await UserProgress.findOne({ user: req.user.id, video: videoId }).lean();
+      if (existingProgress && existingProgress.lastTime !== undefined && lastTime > existingProgress.lastTime) {
+        const secondsWatched = lastTime - existingProgress.lastTime;
+        // No registrar saltos grandes (más de 5 minutos), probablemente el usuario adelantó el video
+        if (secondsWatched > 0 && secondsWatched < 300) {
+          const minutesWatched = secondsWatched / 60;
+          await recordTrialUsage(req.user.id, minutesWatched);
+        }
+      }
+    }
+
     const updateFields = { lastWatched: Date.now() };
     if (lastTime !== undefined) updateFields.lastTime = lastTime;
     if (lastSeason !== undefined) updateFields.lastSeason = lastSeason;

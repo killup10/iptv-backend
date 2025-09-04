@@ -535,6 +535,7 @@ router.get("/", verifyToken, async (req, res, next) => {
 
     if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") query.mainSection = req.query.mainSection;
     if (req.query.genre && req.query.genre !== "Todas") query.genres = req.query.genre;
+    if (req.query.subcategoria && req.query.subcategoria !== "TODOS") query.subcategoria = req.query.subcategoria;
     
     // Handle excludeTipo parameter
     if (req.query.excludeTipo) {
@@ -559,7 +560,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     
     // Lógica de paginación
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 15; // Límite por defecto
+    const limit = parseInt(req.query.limit) || 20; // Límite por defecto
     const skip = (page - 1) * limit;
 
     // Determinar opción de ordenamiento
@@ -575,8 +576,8 @@ router.get("/", verifyToken, async (req, res, next) => {
     // Ejecutar consulta para obtener videos de la página actual
     const videos = await Video.find(query)
       .sort(sortOption)
-      .limit(limit)
-      .skip(skip);
+      .skip(skip)
+      .limit(limit);
                                 
     // Ejecutar consulta para obtener la cantidad total de documentos que coinciden
     const total = await Video.countDocuments(query);
@@ -636,7 +637,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       videos: isAdminView ? videos.map(mapToFullAdminFormat) : videos.map(mapToUserFormat),
       total: total,
       page: page,
-      pages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit)
     });
 
   } catch (error) {
