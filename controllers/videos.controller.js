@@ -390,9 +390,17 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
                 if (vodData.title) {
                     vodData.thumbnail = await getTMDBThumbnail(vodData.title);
                 }
-          // Si la película pertenece a una sección de CINE, forzar planes (no incluir 'gplay')
-          if (vodData.tipo === 'pelicula' && typeof vodData.mainSection === 'string' && vodData.mainSection.startsWith('CINE')) {
-            vodData.requiresPlan = ['estandar','sports','cinefilo','premium'];
+          // Asignar planes requeridos basado en la sección para mantener la integridad de los datos
+          if (vodData.tipo === 'pelicula') {
+            const mainSec = vodData.mainSection || '';
+            if (mainSec === 'CINE_2025' || mainSec === 'CINE_4K' || mainSec === 'CINE_60FPS') {
+              vodData.requiresPlan = ['cinefilo', 'premium'];
+            } else { // Para POR_GENERO y cualquier otra sección de películas
+              vodData.requiresPlan = ['estandar', 'sports', 'cinefilo', 'premium'];
+            }
+          } else if (!vodData.requiresPlan || vodData.requiresPlan.length === 0) {
+            // Fallback para contenido que no sea película (series, etc.) para asegurar que tengan un plan
+            vodData.requiresPlan = ['gplay'];
           }
           const newVideo = new Video(vodData);
                 await newVideo.save();
@@ -610,20 +618,18 @@ export const updateVideoAdmin = async (req, res, next) => {
       // Las películas no tienen temporadas.
       videoToUpdate.seasons = [];
     }
-    // Si el admin dejó 'requiresPlan' vacío al editar, asegurar al menos 'gplay' para que el contenido sea visible
-    try {
-      if (!Array.isArray(videoToUpdate.requiresPlan) || videoToUpdate.requiresPlan.length === 0) {
-        videoToUpdate.requiresPlan = ['gplay'];
+    // Asignar planes requeridos basado en la sección para mantener la integridad de los datos
+    if (videoToUpdate.tipo === 'pelicula') {
+      const mainSec = videoToUpdate.mainSection || '';
+      if (mainSec === 'CINE_2025' || mainSec === 'CINE_4K' || mainSec === 'CINE_60FPS') {
+        videoToUpdate.requiresPlan = ['cinefilo', 'premium'];
+      } else { // Para POR_GENERO y cualquier otra sección de películas
+        videoToUpdate.requiresPlan = ['estandar', 'sports', 'cinefilo', 'premium'];
       }
-    } catch (rpErr) {
-      console.warn('[updateVideoAdmin] No se pudo normalizar requiresPlan:', rpErr?.message || rpErr);
+    } else if (!videoToUpdate.requiresPlan || videoToUpdate.requiresPlan.length === 0) {
+      // Fallback para contenido que no sea película (series, etc.) para asegurar que tengan un plan
+      videoToUpdate.requiresPlan = ['gplay'];
     }
-      // Si la película está en una sección de CINE y es película forzar requiresPlan
-      try {
-        if (videoToUpdate.tipo === 'pelicula' && typeof videoToUpdate.mainSection === 'string' && videoToUpdate.mainSection.startsWith('CINE')) {
-          videoToUpdate.requiresPlan = ['estandar','sports','cinefilo','premium'];
-        }
-      } catch (e) { /* ignore */ }
     
     const updatedVideo = await videoToUpdate.save();
     console.log(`[updateVideoAdmin] Video ${id} actualizado exitosamente.`);

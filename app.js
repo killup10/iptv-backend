@@ -23,6 +23,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 
+// --- PERFORMANCE LOGGER ---
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    // Exclude health checks from performance logs to avoid noise
+    if (req.originalUrl !== '/api/health') {
+      console.log(`[PERF] ${req.method} ${req.originalUrl} - ${res.statusCode} [${duration}ms]`);
+    }
+  });
+  next();
+});
+
 // --- CORS CONFIGURATION (APPLY BEFORE ALL ROUTES) ---
 const allowedDomains = [
   'play.teamg.store',
