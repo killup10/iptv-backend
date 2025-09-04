@@ -299,7 +299,7 @@ router.get("/main-sections", verifyToken, async (req, res, next) => {
       { key: "CINE_2025", displayName: "CINE 2025 (Estrenos)", thumbnailSample: "/img/placeholders/cine_2025.jpg", requiresPlan: "premium", order: 2 },
       { key: "CINE_4K", displayName: "CINE 4K", thumbnailSample: "/img/placeholders/cine_4k.jpg", requiresPlan: "premium", order: 3 },
       { key: "CINE_60FPS", displayName: "CINE 60 FPS", thumbnailSample: "/img/placeholders/cine_60fps.jpg", requiresPlan: "premium", order: 4 },
-    ];
+    ].filter(section => section.key !== "ESPECIALES"); // Ocultar la sección "ESPECIALES" temporalmente
 
     const sectionKeys = ALL_POSSIBLE_SECTIONS
       .map(s => s.key)
@@ -543,13 +543,7 @@ router.get("/", verifyToken, async (req, res, next) => {
       if (req.query.active === 'true') query.active = true;
       if (req.query.active === 'false') query.active = false;
     } else {
-      query.active = true; 
-      const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
-      const userPlanLevel = planHierarchy[userPlan] || 0;
-      const accessiblePlanKeys = Object.keys(planHierarchy).filter(
-        planKey => planHierarchy[planKey] <= userPlanLevel
-      );
-      query.requiresPlan = { $in: accessiblePlanKeys };
+      query.active = true;
     }
 
     if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") query.mainSection = req.query.mainSection;
