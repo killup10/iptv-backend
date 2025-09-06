@@ -578,7 +578,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     
     // Lógica de paginación
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 3000; // Límite por defecto
+    const limit = parseInt(req.query.limit) || 20; // Límite por defecto
     const skip = (page - 1) * limit;
 
     // Determinar opción de ordenamiento
