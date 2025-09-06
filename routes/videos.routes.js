@@ -573,7 +573,8 @@ router.get("/", verifyToken, async (req, res, next) => {
     
     // Aplicar filtro de búsqueda usando el índice de texto
     if (req.query.search) {
-      query.$text = { $search: req.query.search };
+      const searchRegex = new RegExp(req.query.search, 'i');
+      query.title = searchRegex;
     }
     
     // Lógica de paginación
@@ -584,7 +585,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     // Determinar opción de ordenamiento
     let sortOption = { createdAt: -1 };
     if (req.query.search) {
-      sortOption = { score: { $meta: "textScore" } };
+      sortOption = { title: 1 };
     } else if (req.query.sort === 'alphabetical' || (req.query.tipo === 'pelicula' && !req.query.sort)) {
       // Por defecto ordenamos alfabéticamente las películas si no se especifica otro orden
       sortOption = { title: 1 };
