@@ -546,11 +546,13 @@ router.get("/", verifyToken, async (req, res, next) => {
       query.active = true;
     }
 
+        if (!isAdminView) {
         if (req.query.mainSection && req.query.mainSection !== "POR_GENERO") {
-      query.mainSection = req.query.mainSection;
-    } else {
-      // If mainSection is not provided or is "POR_GENERO", exclude specific mainSections
-      query.mainSection = { $nin: ["CINE_2025", "CINE_4K", "CINE_60FPS"] };
+          query.mainSection = req.query.mainSection;
+        } else {
+          // If mainSection is not provided or is "POR_GENERO", exclude specific mainSections
+          query.mainSection = { $nin: ["CINE_2025", "CINE_4K", "CINE_60FPS"] };
+        }
     }
     if (req.query.genre && req.query.genre !== "Todas") query.genres = req.query.genre;
     if (req.query.subcategoria && req.query.subcategoria !== "TODOS") query.subcategoria = req.query.subcategoria;
