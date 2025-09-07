@@ -16,6 +16,7 @@ import vodManagementRoutes from './routes/vodManagement.routes.js';
 import migrationRoutes from './routes/migration.routes.js';
 import progressRoutes from './routes/progress.routes.js';
 import deviceRoutes from './routes/device.routes.js';
+import collectionRoutes from './routes/collection.routes.js';
 
 // --- BASIC SETUP ---
 dotenv.config();
@@ -117,6 +118,7 @@ app.use('/api/manage-vod', vodManagementRoutes);
 app.use('/api/admin', migrationRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api', collectionRoutes);
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
