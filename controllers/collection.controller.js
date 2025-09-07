@@ -69,8 +69,10 @@ export const addItemsToCollection = async (req, res, next) => {
       return res.status(404).json({ error: 'Collection not found.' });
     }
 
-    // Add only items that are not already in the collection
-    const itemsToAdd = items.filter(item => !collection.items.includes(item));
+    // Convert existing items to a Set of strings for efficient lookup
+    const existingItems = new Set(collection.items.map(item => item.toString()));
+    // Filter out items that are already in the collection
+    const itemsToAdd = items.filter(item => !existingItems.has(item));
     
     collection.items.push(...itemsToAdd);
     await collection.save();
