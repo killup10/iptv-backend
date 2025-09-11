@@ -111,8 +111,8 @@ router.get("/public/featured-movies", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Provide absolute URLs and include alternate image fields for the frontend
-  // Priorizar la miniatura personalizada (customThumbnail) sobre tmdbThumbnail
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   logo: makeFullUrl(req, v.logo || ''),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -153,8 +153,8 @@ router.get("/public/featured-series", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  // Priorizar customThumbnail para que la imagen pegada en Admin se muestre primero
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       logo: makeFullUrl(req, v.logo || ''),
       customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
       tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -195,8 +195,8 @@ router.get("/public/featured-animes", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  // Priorizar customThumbnail aquí también
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
   ratingDisplay: finalDisplay,
   ratingLabel: finalLabel,
@@ -227,7 +227,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(doramas.map(mapVODToPublicFormat));
@@ -254,7 +254,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(novelas.map(mapVODToPublicFormat));
@@ -281,7 +281,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(documentales.map(mapVODToPublicFormat));
@@ -608,8 +608,8 @@ router.get("/", verifyToken, async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-  // Priorizar customThumbnail al mapear para usuarios
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
@@ -632,8 +632,8 @@ router.get("/", verifyToken, async (req, res, next) => {
         isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
     customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
     // Preferimos `thumbnail` (campo nuevo) si existe, luego logo, customTMDB
-  // En el formato admin preferimos mostrar la miniatura personalizada si existe
-  thumbnail: v.customThumbnail || v.tmdbThumbnail || v.logo || '',
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || ''),
         trailerUrl: v.trailerUrl, active: v.active,
   ratingDisplay: computeRatingDisplay(v),
         subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
@@ -934,8 +934,8 @@ router.get("/:id", verifyToken, async (req, res, next) => {
   logo: makeFullUrl(req, video.logo || ''),
   customThumbnail: makeFullUrl(req, video.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, video.tmdbThumbnail || ''),
-  // Computed thumbnail that the frontend should use (custom > tmdb > logo)
-  thumbnail: video.customThumbnail || video.tmdbThumbnail || video.logo || makeFullUrl(req, "/img/placeholder-default.png"),
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, video.thumbnail || video.customThumbnail || video.tmdbThumbnail || video.logo || "/img/placeholder-default.png"),
           trailerUrl: video.trailerUrl,
           seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
             seasonNumber: s.seasonNumber,
@@ -1065,7 +1065,8 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       logo: video.logo, // Añadir logo
       customThumbnail: video.customThumbnail, // Añadir customThumbnail
       tmdbThumbnail: video.tmdbThumbnail, // Añadir tmdbThumbnail
-      thumbnail: video.customThumbnail || video.tmdbThumbnail || video.logo || '', // thumbnail unificado
+      // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+      thumbnail: makeFullUrl(req, video.thumbnail || video.customThumbnail || video.tmdbThumbnail || video.logo || ''),
       trailerUrl: video.trailerUrl, // Añadir trailerUrl
       seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
           seasonNumber: s.seasonNumber,
