@@ -25,8 +25,9 @@ export const getContinueWatching = async (req, res, next) => {
         _id: pe.video._id,
         name: pe.video.title,
         title: pe.video.title,
-        thumbnail: pe.video.logo || pe.video.customThumbnail || pe.video.tmdbThumbnail || '',
+        thumbnail: pe.video.customThumbnail || pe.video.tmdbThumbnail || pe.video.logo || '',
         url: pe.video.url || '',
+
         tipo: pe.video.tipo,
         mainSection: pe.video.mainSection,
         genres: pe.video.genres || [],
@@ -579,18 +580,10 @@ export const updateVideoAdmin = async (req, res, next) => {
     });
 
     // --- NUEVA LÓGICA PARA UNIFICAR THUMBNAILS ---
-    // Prioridad: Custom > Logo > TMDB. El campo 'thumbnail' debe tener la imagen final.
-    if (videoToUpdate.customThumbnail) {
-      videoToUpdate.logo = videoToUpdate.customThumbnail;
-      videoToUpdate.thumbnail = videoToUpdate.customThumbnail;
-    } else if (videoToUpdate.logo) {
-      // Si no hay custom, pero sí hay logo (puede haber sido actualizado), usarlo.
-      videoToUpdate.thumbnail = videoToUpdate.logo;
-    } else {
-      // Como último recurso, usar el de TMDB.
-      videoToUpdate.thumbnail = videoToUpdate.tmdbThumbnail;
-    }
+    // Prioridad: Custom > TMDB > Logo. El campo 'thumbnail' debe tener la imagen final.
+    videoToUpdate.thumbnail = videoToUpdate.customThumbnail || videoToUpdate.tmdbThumbnail || videoToUpdate.logo;
     // --- FIN DE LA NUEVA LÓGICA ---
+
 
     // Determinar el tipo final del VOD para la lógica condicional
     const finalTipo = updateData.tipo || videoToUpdate.tipo;
@@ -652,4 +645,4 @@ export const updateVideoAdmin = async (req, res, next) => {
   }
     next(error);
   }
-}; 
+};
