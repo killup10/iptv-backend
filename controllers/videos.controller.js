@@ -389,8 +389,14 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             
             if (!existingVideo) {
                 if (vodData.title) {
-                    vodData.thumbnail = await getTMDBThumbnail(vodData.title);
+                    const tmdbThumb = await getTMDBThumbnail(vodData.title);
+                    if (tmdbThumb) {
+                        vodData.tmdbThumbnail = tmdbThumb;
+                        // El thumbnail principal se establece con la prioridad correcta
+                        vodData.thumbnail = vodData.customThumbnail || vodData.tmdbThumbnail || vodData.logo || '';
+                    }
                 }
+
           // Asignar planes requeridos basado en la sección para mantener la integridad de los datos
           if (vodData.tipo === 'pelicula') {
             const mainSec = vodData.mainSection || '';
@@ -581,8 +587,15 @@ export const updateVideoAdmin = async (req, res, next) => {
 
     // --- NUEVA LÓGICA PARA UNIFICAR THUMBNAILS ---
     // Prioridad: Custom > TMDB > Logo. El campo 'thumbnail' debe tener la imagen final.
-    videoToUpdate.thumbnail = videoToUpdate.customThumbnail || videoToUpdate.tmdbThumbnail || videoToUpdate.logo;
+
+    // Migración de datos legados: si tmdbThumbnail está vacío pero thumbnail parece de TMDB, lo copiamos.
+    if (!videoToUpdate.tmdbThumbnail && videoToUpdate.thumbnail && videoToUpdate.thumbnail.includes('image.tmdb.org')) {
+      videoToUpdate.tmdbThumbnail = videoToUpdate.thumbnail;
+    }
+
+    videoToUpdate.thumbnail = videoToUpdate.customThumbnail || videoToUpdate.tmdbThumbnail || videoToUpdate.logo || '';
     // --- FIN DE LA NUEVA LÓGICA ---
+
 
 
     // Determinar el tipo final del VOD para la lógica condicional
