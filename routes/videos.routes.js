@@ -266,10 +266,10 @@ router.get("/public/featured-novelas", async (req, res, next) => {
 
 router.get("/public/featured-documentales", async (req, res, next) => {
   try {
-    const criteria = { 
-      tipo: "documental", 
-      isFeatured: true, 
-      active: true 
+    const criteria = {
+      tipo: "documental",
+      isFeatured: true,
+      active: true
     };
     const documentales = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
@@ -287,6 +287,46 @@ router.get("/public/featured-documentales", async (req, res, next) => {
     res.json(documentales.map(mapVODToPublicFormat));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-documentales:", error.message);
+    next(error);
+  }
+});
+
+router.get("/public/recently-added", async (req, res, next) => {
+  try {
+    const criteria = {
+      active: true
+    };
+    const videos = await Video.find(criteria).sort({ createdAt: -1 }).limit(15);
+    const mapVODToPublicFormat = (v) => {
+      const computed = computeRating(v);
+      const persistedDisplay = v.ratingDisplay ?? null;
+      const persistedLabel = v.ratingLabel ?? null;
+      const finalDisplay = persistedDisplay || computed.display;
+      const finalLabel = persistedLabel || computed.label;
+      return ({
+      id: v._id,
+      _id: v._id,
+      name: v.title,
+      title: v.title,
+      releaseYear: v.releaseYear || null,
+      description: v.description || "",
+      genres: v.genres || [],
+      mainSection: v.mainSection || "",
+  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
+  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  logo: makeFullUrl(req, v.logo || ''),
+  customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+  tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
+      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+      ratingDisplay: finalDisplay,
+      ratingLabel: finalLabel,
+      trailerUrl: v.trailerUrl || "",
+      tipo: v.tipo
+    });
+    };
+    res.json(videos.map(mapVODToPublicFormat));
+  } catch (error) {
+    console.error("Error en BACKEND /public/recently-added:", error);
     next(error);
   }
 });
