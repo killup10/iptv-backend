@@ -106,13 +106,13 @@ router.get("/public/featured-movies", async (req, res, next) => {
       _id: v._id,
       name: v.title,
       title: v.title,
-      releaseYear: v.releaseYear || null, 
+      releaseYear: v.releaseYear || null,
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Provide absolute URLs and include alternate image fields for the frontend
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   logo: makeFullUrl(req, v.logo || ''),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -123,9 +123,9 @@ router.get("/public/featured-movies", async (req, res, next) => {
     });
     };
     res.json(movies.map(mapVODToPublicFormat));
-  } catch (error) { 
+  } catch (error) {
     console.error("Error en BACKEND /public/featured-movies:", error);
-    next(error); 
+    next(error);
   }
 });
 
@@ -154,7 +154,7 @@ router.get("/public/featured-series", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       logo: makeFullUrl(req, v.logo || ''),
       customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
       tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -174,10 +174,10 @@ router.get("/public/featured-series", async (req, res, next) => {
 router.get("/public/featured-animes", async (req, res, next) => {
   try {
     // CORRECCIÓN: Unifica la búsqueda de animes, sin importar si su tipo es 'anime' o 'serie' con subtipo 'anime'.
-    const criteria = { 
-      $or: [{ tipo: "anime" }, { tipo: "serie", subtipo: "anime" }], 
-      isFeatured: true, 
-      active: true 
+    const criteria = {
+      $or: [{ tipo: "anime" }, { tipo: "serie", subtipo: "anime" }],
+      isFeatured: true,
+      active: true
     };
     const animes = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => {
@@ -196,7 +196,7 @@ router.get("/public/featured-animes", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
   ratingDisplay: finalDisplay,
   ratingLabel: finalLabel,
@@ -212,10 +212,10 @@ router.get("/public/featured-animes", async (req, res, next) => {
 
 router.get("/public/featured-doramas", async (req, res, next) => {
   try {
-    const criteria = { 
-      tipo: "dorama", 
-      isFeatured: true, 
-      active: true 
+    const criteria = {
+      tipo: "dorama",
+      isFeatured: true,
+      active: true
     };
     const doramas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
@@ -227,7 +227,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(doramas.map(mapVODToPublicFormat));
@@ -239,10 +239,10 @@ router.get("/public/featured-doramas", async (req, res, next) => {
 
 router.get("/public/featured-novelas", async (req, res, next) => {
   try {
-    const criteria = { 
-      tipo: "novela", 
-      isFeatured: true, 
-      active: true 
+    const criteria = {
+      tipo: "novela",
+      isFeatured: true,
+      active: true
     };
     const novelas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
@@ -254,7 +254,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(novelas.map(mapVODToPublicFormat));
@@ -281,7 +281,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       description: v.description || "",
       genres: v.genres || [],
       mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
       trailerUrl: v.trailerUrl || ""
     });
     res.json(documentales.map(mapVODToPublicFormat));
@@ -313,7 +313,7 @@ router.get("/public/recently-added", async (req, res, next) => {
       genres: v.genres || [],
       mainSection: v.mainSection || "",
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   logo: makeFullUrl(req, v.logo || ''),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
@@ -643,37 +643,37 @@ router.get("/", verifyToken, async (req, res, next) => {
     // Ejecutar consulta para obtener la cantidad total de documentos que coinciden
     const total = await Video.countDocuments(query);
     
-    const mapToUserFormat = (v) => ({ 
+    const mapToUserFormat = (v) => ({
       id: v._id,
       _id: v._id,
       name: v.title,
       title: v.title,
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
   customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
   tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
   ratingDisplay: computeRatingDisplay(v),
-      url: v.url, mainSection: v.mainSection, genres: v.genres, 
-      description: v.description || "", trailerUrl: v.trailerUrl || "", 
+      url: v.url, mainSection: v.mainSection, genres: v.genres,
+      description: v.description || "", trailerUrl: v.trailerUrl || "",
       tipo: v.tipo,
       releaseYear: v.releaseYear || null,
       subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
-      requiresPlan: v.requiresPlan 
+      requiresPlan: v.requiresPlan
     });
     
   const mapToFullAdminFormat = (v) => {
       // CAMBIO: Mapear 'seasons' en lugar de 'chapters'
-      return { 
-        id: v._id, _id: v._id, title: v.title, name: v.title, 
-        description: v.description, url: v.url, tipo: v.tipo, 
-        mainSection: v.mainSection, genres: v.genres, 
-        requiresPlan: v.requiresPlan, releaseYear: v.releaseYear, 
-        isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
-    customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
+      return {
+        id: v._id, _id: v._id, title: v.title, name: v.title,
+        description: v.description, url: v.url, tipo: v.tipo,
+        mainSection: v.mainSection, genres: v.genres,
+        requiresPlan: v.requiresPlan, releaseYear: v.releaseYear,
+        isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo,
+    customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail,
     // Preferimos `thumbnail` (campo nuevo) si existe, luego logo, customTMDB
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.thumbnail || v.customThumbnail || v.tmdbThumbnail || v.logo || ''),
+  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || ''),
         trailerUrl: v.trailerUrl, active: v.active,
   ratingDisplay: computeRatingDisplay(v),
         subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
@@ -688,7 +688,7 @@ router.get("/", verifyToken, async (req, res, next) => {
                 description: ch.description || ""
             }))
         })) : [],
-        user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
+        user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt
       };
     };
 
@@ -975,7 +975,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
   customThumbnail: makeFullUrl(req, video.customThumbnail || ''),
   tmdbThumbnail: makeFullUrl(req, video.tmdbThumbnail || ''),
   // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, video.thumbnail || video.customThumbnail || video.tmdbThumbnail || video.logo || "/img/placeholder-default.png"),
+  thumbnail: makeFullUrl(req, video.customThumbnail || video.thumbnail || video.tmdbThumbnail || video.logo || "/img/placeholder-default.png"),
           trailerUrl: video.trailerUrl,
           seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
             seasonNumber: s.seasonNumber,
@@ -1106,7 +1106,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       customThumbnail: video.customThumbnail, // Añadir customThumbnail
       tmdbThumbnail: video.tmdbThumbnail, // Añadir tmdbThumbnail
       // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-      thumbnail: makeFullUrl(req, video.thumbnail || video.customThumbnail || video.tmdbThumbnail || video.logo || ''),
+      thumbnail: makeFullUrl(req, video.customThumbnail || video.thumbnail || video.tmdbThumbnail || video.logo || ''),
       trailerUrl: video.trailerUrl, // Añadir trailerUrl
       seasons: video.tipo !== "pelicula" ? (video.seasons || []).map(s => ({
           seasonNumber: s.seasonNumber,
