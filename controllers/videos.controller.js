@@ -32,7 +32,13 @@ export const getContinueWatching = async (req, res, next) => {
         mainSection: pe.video.mainSection,
         genres: pe.video.genres || [],
         trailerUrl: pe.video.trailerUrl || '',
-        watchProgress: { lastTime: pe.progress, lastWatched: pe.lastWatched, lastSeason: pe.lastSeason ?? 0, lastChapter: pe.lastChapter ?? 0 },
+        watchProgress: { 
+          lastTime: pe.progress, 
+          lastWatched: pe.lastWatched, 
+          lastSeason: pe.lastSeason ?? 0, 
+          lastChapter: pe.lastChapter ?? 0, 
+          duration: pe.video.duration || 3600 // Añadir duración (real o ficticia)
+        },
         seasons: pe.video.seasons || [],
         itemType: pe.video.tipo === 'pelicula' ? 'movie' : 'serie',
         requiresPlan: pe.video.requiresPlan || []
@@ -50,7 +56,7 @@ export const getContinueWatching = async (req, res, next) => {
     }
 
     // Ordenar por lastWatched desc y limitar
-    items = items.sort((a, b) => new Date(b.watchProgress.lastWatched || 0) - new Date(a.watchProgress.lastWatched || 0)).slice(0, 10);
+    items = items.sort((a, b) => new Date(b.watchProgress.lastWatched || 0) - new Date(a.watchProgress.lastWatched || 0));
 
     console.log(`[GET /api/videos/user/continue-watching] User ${userId} | Enviando ${items.length} items.`);
     res.json(items);

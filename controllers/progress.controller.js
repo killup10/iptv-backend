@@ -5,7 +5,10 @@ import { recordTrialUsage } from '../middlewares/trialAccess.js';
 
 export const getProgress = async (req, res) => {
   try {
-    const progress = await UserProgress.find({ user: req.user.id }).populate('video');
+    const progress = await UserProgress.find({ user: req.user.id })
+      .populate('video')
+      .sort({ lastWatched: -1 })
+      .limit(100);
     res.json(progress);
   } catch (error) {
     res.status(500).json({ message: 'Error getting user progress', error });
