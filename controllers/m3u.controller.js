@@ -3,7 +3,7 @@ import Video from "../models/Video.js";
 
 export const uploadM3U = async (req, res) => {
   try {
-    const { section = "pelicula", subcategoria } = req.body;
+    const { section = "pelicula" } = req.body;
     const file = req.file || req.files?.file;
 
     if (!file) {
@@ -14,14 +14,27 @@ export const uploadM3U = async (req, res) => {
     const lines = rawData.split(/\r?\n/);
 
     const entries = [];
+    let currentGroup = null;
+
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (line.startsWith("#EXTINF")) {
-        const nextLine = lines[i + 1] || "";
-        if (nextLine.startsWith("http")) {
-          const title = line.split(",").pop().trim();
-          const url = nextLine.trim();
-          entries.push({ title, url });
+      const line = lines[i].trim();
+
+      if (line.startsWith("#EXTGRP:")) {
+        currentGroup = line.substring(8).trim();
+      } else if (line.startsWith("#EXTINF:")) {
+        const title = line.split(",").pop().trim();
+        // Find the next non-empty line for the URL
+        let url = "";
+        for (let j = i + 1; j < lines.length; j++) {
+            if (lines[j].trim()) {
+                url = lines[j].trim();
+                i = j; // Move the outer loop cursor forward
+                break;
+            }
+        }
+
+        if (url && url.startsWith("http")) {
+          entries.push({ title, url, group: currentGroup });
         }
       }
     }
@@ -36,12 +49,18 @@ export const uploadM3U = async (req, res) => {
         continue;
       }
 
-      // Determinar el tipo correcto basado en la subcategoría
+      const subcategoria = entry.group;
       let tipoFinal = section;
       let subtipoFinal = section;
-      
+      let planFinal = [];
+
+      if (section === "pelicula") {
+        planFinal = ["estandar"];
+      } else {
+        planFinal = ["cinefilo", "premium"];
+      }
+
       if (section === "serie" && subcategoria) {
-        // Si la subcategoría es "anime", cambiar el tipo a "anime"
         if (subcategoria.toLowerCase() === "anime") {
           tipoFinal = "anime";
           subtipoFinal = "anime";
@@ -53,8 +72,8 @@ export const uploadM3U = async (req, res) => {
         url: entry.url,
         tipo: tipoFinal,
         subtipo: section !== "pelicula" ? subtipoFinal : undefined,
-        // CAMBIO: No asignar subcategoría a animes
         subcategoria: (section !== "pelicula" && tipoFinal !== "anime") ? subcategoria : undefined,
+        requiresPlan: planFinal,
         description: "Importado desde archivo M3U",
         logo: "",
         isFeatured: false,
