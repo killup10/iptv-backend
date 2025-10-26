@@ -714,7 +714,7 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
     const { title, description, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons } = req.body; 
 
     if (!title) return res.status(400).json({ error: "Título es obligatorio." });
-    const validTipos = ["pelicula", "serie", "anime", "dorama", "novela", "documental"];
+    const validTipos = ["pelicula", "serie", "anime", "dorama", "novela", "documental", "zona kids"];
     if (tipo && !validTipos.includes(tipo)) {
       return res.status(400).json({ error: `Tipo de VOD inválido: '${tipo}'. Tipos válidos: ${validTipos.join(', ')}` });
     }
