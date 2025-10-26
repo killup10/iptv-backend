@@ -48,7 +48,9 @@ const videoSchema = new mongoose.Schema({
   subtipo: {
     type: String,
     required: function() { return this.tipo !== "pelicula"; },
-    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"],
+    // Añadimos "zona kids" aquí para que cuando 'tipo' sea 'zona kids' el valor por defecto
+    // o los valores enviados desde el frontend pasen la validación de Mongoose.
+    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental", "zona kids"],
     default: function() { return this.tipo || "serie"; }
   },
   subcategoria: {
