@@ -1,6 +1,4 @@
-import path from 'path';
-import fs from 'fs/promises';
-import m3uProcessor from '../services/m3uProcessor.js';
+import { uploadM3U } from './m3u.controller.js';
 
 class UploadController {
   /**
@@ -9,62 +7,8 @@ class UploadController {
    * @param {Object} res - Response object
    */
   async handleBulkUpload(req, res) {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'No se proporcionó ningún archivo' 
-        });
-      }
-
-      if (!req.body.section) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'No se especificó la sección' 
-        });
-      }
-
-      // Validar la extensión del archivo
-      const fileExt = path.extname(req.file.originalname).toLowerCase();
-      if (fileExt !== '.m3u') {
-        await fs.unlink(req.file.path); // Eliminar el archivo
-        return res.status(400).json({ 
-          success: false, 
-          message: 'El archivo debe ser .m3u' 
-        });
-      }
-
-      // Procesar el archivo
-      const result = await m3uProcessor.processFile(req.file.path, req.body.section);
-
-      // Eliminar el archivo temporal después de procesarlo
-      await fs.unlink(req.file.path);
-
-      // Enviar respuesta
-      res.json({
-        success: true,
-        ...result,
-        message: `Proceso completado: ${result.added} elementos añadidos, ${result.duplicates} duplicados encontrados, ${result.errors} errores`
-      });
-
-    } catch (error) {
-      console.error('Error en handleBulkUpload:', error);
-
-      // Intentar eliminar el archivo temporal si existe
-      if (req.file && req.file.path) {
-        try {
-          await fs.unlink(req.file.path);
-        } catch (unlinkError) {
-          console.error('Error eliminando archivo temporal:', unlinkError);
-        }
-      }
-
-      res.status(500).json({
-        success: false,
-        message: 'Error procesando el archivo',
-        error: error.message
-      });
-    }
+    // Redirigir la lógica al controlador m3u.controller.js que ya tiene la funcionalidad correcta
+    return uploadM3U(req, res);
   }
 
   /**
@@ -83,11 +27,14 @@ class UploadController {
         });
       }
 
-      const isDuplicate = await m3uProcessor.isDuplicate(url);
+      // Esta parte puede necesitar ajustarse si el modelo de datos cambia, pero por ahora se mantiene
+      // para no romper otras posibles funcionalidades.
+      const Video = (await import('../models/Video.js')).default;
+      const isDuplicate = await Video.findOne({ url: url });
       
       res.json({
         success: true,
-        isDuplicate
+        isDuplicate: !!isDuplicate
       });
 
     } catch (error) {
