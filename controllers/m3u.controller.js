@@ -10,36 +10,38 @@ export const uploadM3U = async (req, res) => {
       return res.status(400).json({ error: "Archivo M3U no proporcionado." });
     }
 
-    // Usar multer.memoryStorage() nos da el buffer directamente
     const rawData = file.buffer.toString("utf-8");
     const lines = rawData.split(/\r?\n/);
 
     const entries = [];
-    let currentGroup = null;
+    let currentEntry = {};
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-
-      if (line.startsWith("#EXTGRP:")) {
-        currentGroup = line.substring(8).trim();
-      } else if (line.startsWith("#EXTINF:")) {
-        const title = line.split(",").pop().trim();
-        let url = "";
-        for (let j = i + 1; j < lines.length; j++) {
-          if (lines[j].trim() && lines[j].trim().startsWith("http")) {
-            url = lines[j].trim();
-            i = j; // Avanzar el cursor principal
-            break;
-          }
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine.startsWith('#EXTINF:')) {
+        if (currentEntry.title && currentEntry.url) {
+          if (!currentEntry.group) currentEntry.group = 'General';
+          entries.push(currentEntry);
         }
-        if (url) {
-          // Si no hay #EXTGRP, usamos el título del primer episodio como título de la serie
-          entries.push({ title, url, group: currentGroup || title });
+        currentEntry = { title: trimmedLine.split(',').pop().trim() };
+      } else if (trimmedLine.startsWith('#EXTGRP:')) {
+        if (currentEntry.title) {
+          currentEntry.group = trimmedLine.substring(8).trim();
+        }
+      } else if (trimmedLine && !trimmedLine.startsWith('#')) {
+        if (currentEntry.title) {
+          currentEntry.url = trimmedLine;
+          if (!currentEntry.group) currentEntry.group = 'General';
+          entries.push(currentEntry);
+          currentEntry = {};
         }
       }
     }
+    if (currentEntry.title && currentEntry.url) {
+      if (!currentEntry.group) currentEntry.group = 'General';
+      entries.push(currentEntry);
+    }
 
-    // Si la sección es para películas, se procesan individualmente
     if (section === "pelicula") {
       let added = 0;
       let duplicates = 0;
@@ -63,7 +65,6 @@ export const uploadM3U = async (req, res) => {
       return res.json({ message: "Películas procesadas.", added, duplicates });
     }
 
-    // Lógica para agrupar series, animes, documentales, etc.
     const contentGroups = {};
     entries.forEach(entry => {
       const groupTitle = entry.group;
@@ -83,8 +84,8 @@ export const uploadM3U = async (req, res) => {
       if (!video) {
         video = new Video({
           title: groupTitle,
-          tipo: section, // Dinámico según la categoría seleccionada
-          subtipo: section, // Dinámico
+          tipo: section,
+          subtipo: section,
           requiresPlan: section === 'pelicula' ? ["estandar"] : ["cinefilo", "premium"],
           description: `Contenido '${groupTitle}' importado desde M3U.`,
           active: true,
@@ -102,7 +103,7 @@ export const uploadM3U = async (req, res) => {
           episodeNumber = parseInt(seasonMatch[2], 10);
         } else {
           const epMatch = episode.title.match(/(?:EP|E)(\d+)/i);
-          seasonNumber = 1; // Asumir temporada 1 si no se especifica
+          seasonNumber = 1;
           episodeNumber = epMatch ? parseInt(epMatch[1], 10) : undefined;
         }
 
@@ -117,7 +118,7 @@ export const uploadM3U = async (req, res) => {
           season.chapters.push({
             title: episode.title,
             url: episode.url,
-            episodeNumber: episodeNumber, // Guardar número de episodio
+            episodeNumber: episodeNumber,
             duration: "0:00",
             description: "",
           });
@@ -125,7 +126,6 @@ export const uploadM3U = async (req, res) => {
         }
       }
       
-      // Ordenar temporadas y capítulos
       video.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
       video.seasons.forEach(s => s.chapters.sort((a, b) => a.episodeNumber - b.episodeNumber));
 
