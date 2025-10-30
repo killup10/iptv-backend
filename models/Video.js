@@ -43,21 +43,21 @@ const videoSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: true,
-    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental", "zona kids"]
+    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"]
   },
   subtipo: {
     type: String,
     required: function() { return this.tipo !== "pelicula"; },
     // Añadimos "zona kids" aquí para que cuando 'tipo' sea 'zona kids' el valor por defecto
     // o los valores enviados desde el frontend pasen la validación de Mongoose.
-    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental", "zona kids"],
+    enum: ["pelicula", "serie", "anime", "dorama", "novela", "documental"],
     default: function() { return this.tipo || "serie"; }
   },
   subcategoria: {
     type: String,
     required: function() {
       // La subcategoría NO es requerida para películas, animes o zona kids
-      if (this.tipo === "pelicula" || this.tipo === "anime" || this.tipo === "zona kids") return false;
+      if (this.tipo === "pelicula" || this.tipo === "anime") return false;
       // Tampoco es requerida para series con subtipo anime
       if (this.tipo === "serie" && this.subtipo === "anime") return false;
       // Para el resto (series normales, doramas, novelas, documentales) sí es requerida
@@ -66,11 +66,11 @@ const videoSchema = new mongoose.Schema({
     enum: [
            
       "Netflix", "Prime Video", "Disney", "Apple TV", "HBO Max",
-       "Hulu y Otros", "Retro", "Animadas", "ZONA KIDS"
+       "Hulu y Otros", "Retro", "Animadas"
     ],
     default: function() {
       // No asignar default para animes o zona kids
-      if (this.tipo === "anime" || this.tipo === "zona kids") return undefined;
+      if (this.tipo === "anime") return undefined;
       if (this.tipo === "serie" && this.subtipo === "anime") return undefined;
       return "Netflix";
     }

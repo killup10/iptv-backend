@@ -23,68 +23,109 @@ export const uploadM3U = async (req, res) => {
         currentGroup = line.substring(8).trim();
       } else if (line.startsWith("#EXTINF:")) {
         const title = line.split(",").pop().trim();
-        // Find the next non-empty line for the URL
         let url = "";
         for (let j = i + 1; j < lines.length; j++) {
-            if (lines[j].trim()) {
-                url = lines[j].trim();
-                i = j; // Move the outer loop cursor forward
-                break;
-            }
+          if (lines[j].trim() && lines[j].trim().startsWith("http")) {
+            url = lines[j].trim();
+            i = j;
+            break;
+          }
         }
-
-        if (url && url.startsWith("http")) {
-          entries.push({ title, url, group: currentGroup });
+        if (url) {
+          entries.push({ title, url, group: currentGroup || "General" });
         }
       }
     }
 
-    let added = 0;
-    let duplicates = 0;
-
-    for (const entry of entries) {
-      const exists = await Video.findOne({ title: entry.title });
-      if (exists) {
-        duplicates++;
-        continue;
-      }
-
-      const subcategoria = entry.group;
-      let tipoFinal = section;
-      let subtipoFinal = section;
-      let planFinal = [];
-
-      if (section === "pelicula") {
-        planFinal = ["estandar"];
-      } else {
-        planFinal = ["cinefilo", "premium"];
-      }
-
-      if (section === "serie" && subcategoria) {
-        if (subcategoria.toLowerCase() === "anime") {
-          tipoFinal = "anime";
-          subtipoFinal = "anime";
+    if (section === "pelicula") {
+      let added = 0;
+      let duplicates = 0;
+      for (const entry of entries) {
+        const exists = await Video.findOne({ url: entry.url });
+        if (exists) {
+          duplicates++;
+          continue;
         }
+        const newVideo = new Video({
+          title: entry.title,
+          url: entry.url,
+          tipo: "pelicula",
+          requiresPlan: ["estandar"],
+          description: "Importado desde archivo M3U",
+          active: true,
+        });
+        await newVideo.save();
+        added++;
       }
-
-      const newVideo = new Video({
-        title: entry.title,
-        url: entry.url,
-        tipo: tipoFinal,
-        subtipo: section !== "pelicula" ? subtipoFinal : undefined,
-        subcategoria: (section !== "pelicula" && tipoFinal !== "anime") ? subcategoria : undefined,
-        requiresPlan: planFinal,
-        description: "Importado desde archivo M3U",
-        logo: "",
-        isFeatured: false,
-        active: true,
-        seasons: section !== "pelicula" ? [] : undefined
-      });
-      await newVideo.save();
-      added++;
+      return res.json({ message: "Películas procesadas.", added, duplicates });
     }
 
-    return res.json({ message: "Archivo procesado.", added, duplicates });
+    // Lógica para series
+    const series = {};
+    entries.forEach(entry => {
+      const seriesTitle = entry.group;
+      if (!series[seriesTitle]) {
+        series[seriesTitle] = [];
+      }
+      series[seriesTitle].push(entry);
+    });
+
+    let seriesAdded = 0;
+    let episodesAdded = 0;
+
+    for (const seriesTitle in series) {
+      let video = await Video.findOne({ title: seriesTitle, tipo: "serie" });
+      let isNewSeries = false;
+      if (!video) {
+        video = new Video({
+          title: seriesTitle,
+          tipo: "serie",
+          subtipo: "serie",
+          requiresPlan: ["cinefilo", "premium"],
+          description: `Serie ${seriesTitle} importada desde M3U.`,
+          active: true,
+          seasons: [],
+        });
+        isNewSeries = true;
+      }
+
+      for (const episode of series[seriesTitle]) {
+        const seasonMatch = episode.title.match(/S(\d{1,2})E(\d{1,3})/i);
+        let seasonNumber, episodeNumber;
+
+        if (seasonMatch) {
+          seasonNumber = parseInt(seasonMatch[1], 10);
+          episodeNumber = parseInt(seasonMatch[2], 10);
+        } else {
+          const epMatch = episode.title.match(/EP(\d+)/i);
+          seasonNumber = 1;
+          episodeNumber = epMatch ? parseInt(epMatch[1], 10) : video.seasons.reduce((acc, s) => acc + s.chapters.length, 1) + 1;
+        }
+
+        let season = video.seasons.find(s => s.seasonNumber === seasonNumber);
+        if (!season) {
+          season = { seasonNumber, title: `Temporada ${seasonNumber}`, chapters: [] };
+          video.seasons.push(season);
+        }
+
+        const chapterExists = season.chapters.some(c => c.url === episode.url || c.title.trim().toLowerCase() === episode.title.trim().toLowerCase());
+        if (!chapterExists) {
+          season.chapters.push({
+            title: episode.title,
+            url: episode.url,
+            duration: "0:00",
+            description: "",
+          });
+          episodesAdded++;
+        }
+      }
+      
+      if (isNewSeries) seriesAdded++;
+      await video.save();
+    }
+
+    return res.json({ message: "Series procesadas.", seriesAdded, episodesAdded });
+
   } catch (error) {
     console.error("Error al procesar archivo M3U:", error);
     return res.status(500).json({ error: "Error procesando el archivo M3U." });
