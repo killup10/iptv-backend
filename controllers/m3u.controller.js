@@ -133,7 +133,11 @@ export const uploadM3U = async (req, res) => {
       await video.save();
     }
 
-    return res.json({ message: `Contenido (${section}) procesado.`, contentAdded, episodesAdded });
+    return res.json({ 
+      message: `NUEVA VERSIÓN DEL CÓDIGO EJECUTADA. Contenido (${section}) procesado.`,
+      contentAdded, 
+      episodesAdded 
+    });
 
   } catch (error) {
     console.error("Error al procesar archivo M3U:", error);

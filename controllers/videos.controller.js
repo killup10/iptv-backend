@@ -89,13 +89,16 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
     let currentVideoData = {};
     let itemsFoundInFile = 0;
 
-    // Función para detectar y extraer información de serie y temporada
-    const parseSeriesInfo = (title) => {
+  // Función para detectar y extraer información de serie y temporada
+  // Se añaden patrones para reconocer títulos que empiezan con "EP1", "EP01", "Episodio 1", etc.
+  const parseSeriesInfo = (title) => {
       // Patrones para detectar Temporada y Episodio
       // Ejemplo: "Serie - S01E01", "Serie T1 E1", "Serie Temporada 1 Capitulo 1", "1x11 Fin del servicio"
       const patterns = [
-        // Patrón para formato "1x11 Título del episodio" (muy común)
-        /^(\d+)x(\d+)\s+(.+)$/i,
+  // Patrón para formato "EP1 - Título" o "Episodio 1 - Título"
+  /^\s*(?:EP|EPI?SODIO|E)\s*0*(\d+)\s*[-–:\s]+(.+)$/i,
+  // Patrón para formato "1x11 Título del episodio" (muy común)
+  /^(\d+)x(\d+)\s+(.+)$/i,
         // Patrón para formato "Serie - S01E01"
         /^(.*?)\s*[-–\s]*S(?:eason)?\s*(\d+)\s*E(?:pisode)?\s*(\d+)/i,
         // Patrón para formato "Serie S1E1" o "Serie S01E01"
@@ -152,6 +155,9 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
       return null;
     };
 
+    // Acumula errores de parseo (URLs malformadas, entradas inválidas)
+    let parseErrors = [];
+
     // Función para detectar subtipo (sin cambios)
     const detectSubtipo = (title, genres = []) => {
       title = title.toLowerCase();
@@ -191,8 +197,10 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
           genres: [],
         };
 
-        // Extraer título
-        let titlePart = line.substring(line.lastIndexOf(",") + 1).trim();
+  // Extraer título: usar regex para capturar todo lo que está después de la PRIMERA coma
+  // Esto evita cortar títulos que contienen comas internas (p. ej. "Woolong, el terrible").
+  let titleMatch = line.match(/#EXTINF:[^,]*,(.*)$/i);
+  let titlePart = titleMatch ? titleMatch[1].trim() : line.substring(line.lastIndexOf(",") + 1).trim();
         
         // Detectar si es un episodio de serie/temporada
         const seriesInfo = parseSeriesInfo(titlePart);
@@ -290,6 +298,16 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
       } else if (currentVideoData.title && !line.startsWith("#")) {
         // Esta línea es la URL
         currentVideoData.url = line;
+
+        // VALIDACIÓN: saltar URLs que no sean http/https y registrar error para el admin
+        if (!/^https?:\/\//i.test(currentVideoData.url)) {
+          // Guardar el error y continuar (no agregamos la entrada con URL inválida)
+          try {
+            parseErrors.push(`Entrada ignorada (URL inválida): "${currentVideoData.title}" → "${currentVideoData.url}"`);
+          } catch(_) {}
+          currentVideoData = {};
+          continue; // seguir con la siguiente línea del archivo
+        }
         
         if (currentVideoData.tipo === "serie" && currentVideoData.seriesName) {
           const seriesKey = currentVideoData.seriesName;
@@ -373,6 +391,10 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
     let vodsAddedCount = 0;
     let vodsSkippedCount = 0;
     const errors = [];
+    // Incorporar errores de parseo tempranos (URLs inválidas, entradas ignoradas)
+    if (typeof parseErrors !== 'undefined' && Array.isArray(parseErrors) && parseErrors.length > 0) {
+      errors.push(...parseErrors);
+    }
     const BATCH_SIZE = 50; // Procesar en lotes de 50 para evitar sobrecarga
 
     // Procesar en lotes para mejorar el rendimiento
