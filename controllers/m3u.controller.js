@@ -113,7 +113,7 @@ export const uploadM3U = async (req, res) => {
           video.seasons.push(season);
         }
 
-        const chapterExists = season.chapters.some(c => c.url === episode.url || c.title.trim().toLowerCase() === episode.title.trim().toLowerCase());
+        const chapterExists = season.chapters.some(c => c.url === episode.url || (c.title && c.title.trim().toLowerCase()) === (episode.title && episode.title.trim().toLowerCase()));
         if (!chapterExists) {
           season.chapters.push({
             title: episode.title,

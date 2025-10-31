@@ -7,32 +7,23 @@ import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Obtiene la lista de "Continuar Viendo" específica para el usuario actual.
 export const getContinueWatching = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    if (!userId) return res.status(401).json({ error: 'No se pudo identificar al usuario.' });
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "No se pudo identificar al usuario." });
+    }
 
-    const userPlanFromToken = req.user.plan || 'gplay';
-    const normalizedUserPlanKey = userPlanFromToken === 'basico' ? 'gplay' : userPlanFromToken;
-    const isAdminUser = req.user.role === 'admin';
+    const progressEntries = await UserProgress.find({ user: userId, progress: { $gt: 5 } })
+      .populate('video')
+      .lean();
 
-    // Obtener entradas de UserProgress y popular video
-    const progressEntries = await UserProgress.find({ user: userId, progress: { $gt: 5 }, }).populate('video').lean();
-
-    // Filtrar out los que no tienen video o video no activo
     let items = progressEntries
-      .filter(pe => pe.video && pe.video.active && !pe.completed)
+      .filter(pe => pe.video && pe.video.active)
       .map(pe => ({
         id: pe.video._id,
-        _id: pe.video._id,
-        name: pe.video.title,
         title: pe.video.title,
         thumbnail: pe.video.customThumbnail || pe.video.tmdbThumbnail || pe.video.logo || '',
-        url: pe.video.url || '',
-
-        tipo: pe.video.tipo,
-        mainSection: pe.video.mainSection,
-        genres: pe.video.genres || [],
-        trailerUrl: pe.video.trailerUrl || '',
-        watchProgress: { 
+        watchProgress: {
+          progress: pe.progress,
           lastTime: pe.progress, 
           lastWatched: pe.lastWatched, 
           lastSeason: pe.lastSeason ?? 0, 
@@ -45,6 +36,9 @@ export const getContinueWatching = async (req, res, next) => {
       }));
 
     // Aplicar filtro por plan si no es admin
+    const isAdminUser = req.user.roles.includes('admin');
+    const normalizedUserPlanKey = (req.user.plan || 'gplay').toLowerCase();
+
     if (!isAdminUser) {
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
       const userPlanLevel = planHierarchy[normalizedUserPlanKey] || 0;
@@ -96,7 +90,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
       // Ejemplo: "Serie - S01E01", "Serie T1 E1", "Serie Temporada 1 Capitulo 1", "1x11 Fin del servicio"
       const patterns = [
   // Patrón para formato "EP1 - Título" o "Episodio 1 - Título"
-  /^\s*(?:EP|EPI?SODIO|E)\s*0*(\d+)\s*[-–:\s]+(.+)$/i,
+  /^S*(?:EP|EPI?SODIO|E)S*0*(\d+)S*[-–:\s]+(.+)$/i,
   // Patrón para formato "1x11 Título del episodio" (muy común)
   /^(\d+)x(\d+)\s+(.+)$/i,
         // Patrón para formato "Serie - S01E01"
@@ -121,23 +115,23 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             // Formato "1x11 Título del episodio" - necesitamos obtener el nombre de la serie de los géneros
             seasonNumber = parseInt(match[1], 10);
             episodeNumber = parseInt(match[2], 10);
-            episodeTitle = match[3].trim();
+            episodeTitle = (match[3] || '').trim();
             // En este caso, el nombre de la serie vendrá de los géneros
             seriesName = null; // Se asignará después
           } else if (i === 1 || i === 2) {
             // Formatos "Serie - S01E01" o "Serie S1E1"
-            seriesName = match[1].trim();
+            seriesName = (match[1] || '').trim();
             seasonNumber = parseInt(match[2], 10);
             episodeNumber = parseInt(match[3], 10);
           } else if (i === 3) {
             // Formato "Serie - 1x01 - Título"
-            seriesName = match[1].trim();
+            seriesName = (match[1] || '').trim();
             seasonNumber = parseInt(match[2], 10);
             episodeNumber = parseInt(match[3], 10);
             episodeTitle = match[4] ? match[4].trim() : '';
           } else {
             // Otros formatos
-            seriesName = match[1].trim();
+            seriesName = (match[1] || '').trim();
             seasonNumber = parseInt(match[3] || match[2] || '1', 10);
             episodeNumber = parseInt(match[2] || match[4], 10);
           }
@@ -160,17 +154,18 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
 
     // Función para detectar subtipo (sin cambios)
     const detectSubtipo = (title, genres = []) => {
-      title = title.toLowerCase();
+      title = (title || '').toLowerCase();
       const keywords = {
         anime: ['anime', 'sub esp', 'japanese', '(jp)', 'temporada'],
         dorama: ['dorama', 'kdrama', 'korean', '(kr)'],
         novela: ['novela', 'telenovela'],
-        documental: ['documental', 'documentary', 'national geographic', 'discovery']
+        documental: ['documental', 'documentary', 'national geographic', 'discovery'],
+        'zona kids': ['zona kids', 'kids', 'infantil']
       };
 
       for (const [tipo, palabras] of Object.entries(keywords)) {
         if (palabras.some(word => title.includes(word)) || 
-            genres.some(genre => palabras.includes(genre.toLowerCase()))) {
+            genres.some(genre => palabras.includes((genre || '').toLowerCase()))) {
           return tipo;
         }
       }
@@ -200,7 +195,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
   // Extraer título: usar regex para capturar todo lo que está después de la PRIMERA coma
   // Esto evita cortar títulos que contienen comas internas (p. ej. "Woolong, el terrible").
   let titleMatch = line.match(/#EXTINF:[^,]*,(.*)$/i);
-  let titlePart = titleMatch ? titleMatch[1].trim() : line.substring(line.lastIndexOf(",") + 1).trim();
+  let titlePart = titleMatch ? (titleMatch[1] || '').trim() : (line.substring(line.lastIndexOf(",") + 1) || '').trim();
         
         // Detectar si es un episodio de serie/temporada
         const seriesInfo = parseSeriesInfo(titlePart);
@@ -215,8 +210,8 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             // Primero intentamos extraer géneros para obtener el nombre de la serie
             let nextLineIndex = i + 1;
             if (lines[nextLineIndex]?.startsWith("#EXTGRP:")) {
-              const genreString = lines[nextLineIndex].substring("#EXTGRP:".length).trim();
-              currentVideoData.genres = genreString.split(/[,|]/).map(g => g.trim()).filter(g => g);
+              const genreString = (lines[nextLineIndex].substring("#EXTGRP:".length) || '').trim();
+              currentVideoData.genres = genreString.split(/[,|]/).map(g => (g || '').trim()).filter(g => g);
               // El primer género suele ser el nombre de la serie
               if (currentVideoData.genres.length > 0) {
                 seriesName = currentVideoData.genres[0];
@@ -230,7 +225,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             if (!seriesName) {
               const groupMatch = line.match(/group-title="([^"]*)"/i);
               if (groupMatch && groupMatch[1]) {
-                const groupGenres = groupMatch[1].split(/[,|]/).map(g => g.trim()).filter(g => g);
+                const groupGenres = groupMatch[1].split(/[,|]/).map(g => (g || '').trim()).filter(g => g);
                 if (groupGenres.length > 0) {
                   seriesName = groupGenres[0];
                   currentVideoData.genres = groupGenres.slice(1);
@@ -277,8 +272,8 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
         // Intentar extraer géneros de la línea #EXTGRP:
         let nextLineIndex = i + 1;
         if (lines[nextLineIndex]?.startsWith("#EXTGRP:")) {
-          const genreString = lines[nextLineIndex].substring("#EXTGRP:".length).trim();
-          currentVideoData.genres = genreString.split(/[,|]/).map(g => g.trim()).filter(g => g);
+          const genreString = (lines[nextLineIndex].substring("#EXTGRP:".length) || '').trim();
+          currentVideoData.genres = genreString.split(/[,|]/).map(g => (g || '').trim()).filter(g => g);
           i = nextLineIndex; 
         }
         
@@ -286,7 +281,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
         if ((!currentVideoData.genres || currentVideoData.genres.length === 0)) {
             const groupMatch = line.match(/group-title="([^"]*)"/i);
             if (groupMatch && groupMatch[1]) {
-                currentVideoData.genres = groupMatch[1].split(/[,|]/).map(g => g.trim()).filter(g => g);
+                currentVideoData.genres = groupMatch[1].split(/[,|]/).map(g => (g || '').trim()).filter(g => g);
             }
         }
         
@@ -623,8 +618,6 @@ export const updateVideoAdmin = async (req, res, next) => {
 
     videoToUpdate.thumbnail = videoToUpdate.customThumbnail || videoToUpdate.tmdbThumbnail || videoToUpdate.logo || '';
     // --- FIN DE LA NUEVA LÓGICA ---
-
-
 
     // Determinar el tipo final del VOD para la lógica condicional
     const finalTipo = updateData.tipo || videoToUpdate.tipo;
