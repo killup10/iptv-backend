@@ -23,8 +23,8 @@ export const getContinueWatching = async (req, res, next) => {
         title: pe.video.title,
         thumbnail: pe.video.customThumbnail || pe.video.tmdbThumbnail || pe.video.logo || '',
         watchProgress: {
-          progress: pe.progress,
-          lastTime: pe.progress, 
+          progress: pe.lastTime || pe.progress,
+          lastTime: pe.lastTime || pe.progress, 
           lastWatched: pe.lastWatched, 
           lastSeason: pe.lastSeason ?? 0, 
           lastChapter: pe.lastChapter ?? 0, 
@@ -36,7 +36,7 @@ export const getContinueWatching = async (req, res, next) => {
       }));
 
     // Aplicar filtro por plan si no es admin
-    const isAdminUser = req.user.roles.includes('admin');
+    const isAdminUser = Array.isArray(req.user.roles) && req.user.roles.includes('admin');
     const normalizedUserPlanKey = (req.user.plan || 'gplay').toLowerCase();
 
     if (!isAdminUser) {
