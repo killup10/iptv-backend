@@ -26,8 +26,8 @@ export const getContinueWatching = async (req, res, next) => {
           progress: pe.lastTime || pe.progress,
           lastTime: pe.lastTime || pe.progress, 
           lastWatched: pe.lastWatched, 
-          lastSeason: pe.lastSeason ?? 0, 
-          lastChapter: pe.lastChapter ?? 0, 
+          lastSeason: pe.lastSeason ?? 1, // Default to season 1 if not set
+          lastChapter: pe.lastChapter ?? 0, // Default to chapter index 0 if not set
           duration: pe.video.duration || 3600 // Añadir duración (real o ficticia)
         },
         seasons: pe.video.seasons || [],
@@ -675,8 +675,77 @@ export const updateVideoAdmin = async (req, res, next) => {
       // fallback to raw errors object if something unexpected
       return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
     }
-    return res.status(400).json({ error: "Error de validación del backend.", details });
+    next(error);
   }
+};
+
+export const getNextChapter = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { season, chapter } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "ID de video inválido." });
+    }
+
+    const video = await Video.findById(id).lean();
+
+    if (!video) {
+      return res.status(404).json({ error: "Video no encontrado." });
+    }
+
+    if (video.tipo === 'pelicula') {
+      return res.status(200).json({ message: "Es una película, no hay próximo capítulo." });
+    }
+
+    const seasonNumber = parseInt(season, 10);
+    const chapterIndex = parseInt(chapter, 10);
+
+    if (isNaN(seasonNumber) || isNaN(chapterIndex)) {
+      return res.status(400).json({ error: "Los parámetros 'season' y 'chapter' deben ser números." });
+    }
+
+    const currentSeason = video.seasons.find(s => s.seasonNumber === seasonNumber);
+
+    if (!currentSeason) {
+      return res.status(404).json({ error: "Temporada no encontrada." });
+    }
+
+    // Check for next chapter in the same season
+    if (chapterIndex + 1 < currentSeason.chapters.length) {
+      const nextChapter = currentSeason.chapters[chapterIndex + 1];
+      return res.json({
+        nextChapter: {
+          ...nextChapter,
+          seasonNumber: seasonNumber,
+          chapterIndex: chapterIndex + 1,
+          autoplay: true // Indicar al frontend que debe reproducir automáticamente
+        }
+      });
+    }
+
+    // Check for the first chapter of the next season
+    const currentSeasonIndex = video.seasons.findIndex(s => s.seasonNumber === seasonNumber);
+    if (currentSeasonIndex + 1 < video.seasons.length) {
+      const nextSeason = video.seasons[currentSeasonIndex + 1];
+      if (nextSeason && nextSeason.chapters.length > 0) {
+        const nextChapter = nextSeason.chapters[0];
+        return res.json({
+          nextChapter: {
+            ...nextChapter,
+            seasonNumber: nextSeason.seasonNumber,
+            chapterIndex: 0,
+            autoplay: true // Indicar al frontend que debe reproducir automáticamente
+          }
+        });
+      }
+    }
+
+    // No more chapters
+    return res.status(200).json({ message: "Fin de la serie." });
+
+  } catch (error) {
+    console.error(`Error en getNextChapter para video ${req.params.id}:`, error);
     next(error);
   }
 };

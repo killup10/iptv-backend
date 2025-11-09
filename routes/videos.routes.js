@@ -7,7 +7,7 @@ import Video from "../models/Video.js";
 import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
-import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
+import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin, getNextChapter } from "../controllers/videos.controller.js";
 
 
 
@@ -423,6 +423,8 @@ router.get("/:id/progress", verifyToken, async (req, res, next) => {
     next(error);
   }
 });
+
+router.get("/:id/next-chapter", verifyToken, getNextChapter);
 
 // Guarda/Actualiza el progreso de un video específico para el usuario actual
 router.put("/:id/progress", verifyToken, async (req, res, next) => {
@@ -891,7 +893,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
       return res.status(400).json({ error: "ID de video con formato inválido." });
     }
     
-    const video = await Video.findById(req.params.id);
+    const video = await Video.findById(req.params.id).lean();
     if (!video) return res.status(404).json({ error: "Video no encontrado" });
 
     const userPlan = req.user.plan || 'gplay';
@@ -1085,6 +1087,42 @@ router.get("/:id", verifyToken, async (req, res, next) => {
         ...trialInfo
       });
     }
+
+    let nextChapterInfo = null;
+    if (video.tipo !== 'pelicula' && req.query.season && req.query.chapter) {
+      const seasonNumber = parseInt(req.query.season, 10);
+      const chapterIndex = parseInt(req.query.chapter, 10);
+
+      if (!isNaN(seasonNumber) && !isNaN(chapterIndex)) {
+        const currentSeason = video.seasons.find(s => s.seasonNumber === seasonNumber);
+        if (currentSeason) {
+          // Check for next chapter in the same season
+          if (chapterIndex + 1 < currentSeason.chapters.length) {
+            const nextChapter = currentSeason.chapters[chapterIndex + 1];
+            nextChapterInfo = {
+              ...nextChapter,
+              seasonNumber: seasonNumber,
+              chapterIndex: chapterIndex + 1
+            };
+          } else {
+            // Check for the first chapter of the next season
+            const currentSeasonIndex = video.seasons.findIndex(s => s.seasonNumber === seasonNumber);
+            if (currentSeasonIndex + 1 < video.seasons.length) {
+              const nextSeason = video.seasons[currentSeasonIndex + 1];
+              if (nextSeason && nextSeason.chapters.length > 0) {
+                const nextChapter = nextSeason.chapters[0];
+                nextChapterInfo = {
+                  ...nextChapter,
+                  seasonNumber: nextSeason.seasonNumber,
+                  chapterIndex: 0
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
     const response = {
       id: video._id,
       name: video.title,
@@ -1119,6 +1157,7 @@ router.get("/:id", verifyToken, async (req, res, next) => {
               description: ch.description || ""
           }))
       })) : [],
+      nextChapter: nextChapterInfo
     };
     res.json(response);
   } catch (err) { next(err); }
