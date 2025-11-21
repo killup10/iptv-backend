@@ -21,6 +21,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || "https://play.teamg.store",
   "https://www.play.teamg.store",
   "http://localhost:3000",
+  "http://localhost:5173",
   "https://localhost",
   "https://127.0.0.1",
   "http://127.0.0.1:3000"

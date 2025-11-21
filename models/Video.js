@@ -111,6 +111,8 @@ const videoSchema = new mongoose.Schema({
   releaseYear: { type: Number },
   isFeatured: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
+  hasNewEpisodes: { type: Boolean, default: false },
+  latestUpdate: { type: Date, default: null },
 
   thumbnail: { type: String, default: '' },
   logo: { type: String, default: '' },

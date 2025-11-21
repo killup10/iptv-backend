@@ -7,7 +7,7 @@ import Video from "../models/Video.js";
 import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
-import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin, getNextChapter } from "../controllers/videos.controller.js";
+import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
 
 
 
@@ -137,7 +137,7 @@ router.get("/public/featured-series", async (req, res, next) => {
       isFeatured: true, 
       active: true 
     };
-    const series = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const series = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => {
       const computed = computeRating(v);
       const persistedDisplay = v.ratingDisplay ?? null;
@@ -179,7 +179,7 @@ router.get("/public/featured-animes", async (req, res, next) => {
       isFeatured: true,
       active: true
     };
-    const animes = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const animes = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => {
       const computed = computeRating(v);
       const persistedDisplay = v.ratingDisplay ?? null;
@@ -217,7 +217,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       isFeatured: true,
       active: true
     };
-    const doramas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const doramas = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
       id: v._id,
       _id: v._id,
@@ -244,7 +244,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       isFeatured: true,
       active: true
     };
-    const novelas = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const novelas = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
       id: v._id,
       _id: v._id,
@@ -271,7 +271,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       isFeatured: true,
       active: true
     };
-    const documentales = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
+    const documentales = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
     const mapVODToPublicFormat = (v) => ({
       id: v._id,
       _id: v._id,
@@ -296,7 +296,7 @@ router.get("/public/recently-added", async (req, res, next) => {
     const criteria = {
       active: true
     };
-    const videos = await Video.find(criteria).sort({ createdAt: -1 }).limit(15);
+    const videos = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(15);
     const mapVODToPublicFormat = (v) => {
       const computed = computeRating(v);
       const persistedDisplay = v.ratingDisplay ?? null;
@@ -321,7 +321,8 @@ router.get("/public/recently-added", async (req, res, next) => {
       ratingDisplay: finalDisplay,
       ratingLabel: finalLabel,
       trailerUrl: v.trailerUrl || "",
-      tipo: v.tipo
+      tipo: v.tipo,
+      hasNewEpisodes: v.hasNewEpisodes || false
     });
     };
     res.json(videos.map(mapVODToPublicFormat));
@@ -424,7 +425,7 @@ router.get("/:id/progress", verifyToken, async (req, res, next) => {
   }
 });
 
-router.get("/:id/next-chapter", verifyToken, getNextChapter);
+// router.get("/:id/next-chapter", verifyToken, getNextChapter);
 
 // Guarda/Actualiza el progreso de un video específico para el usuario actual
 router.put("/:id/progress", verifyToken, async (req, res, next) => {
@@ -627,7 +628,7 @@ router.get("/", verifyToken, async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     // Determinar opción de ordenamiento
-    let sortOption = { createdAt: -1 };
+    let sortOption = { latestUpdate: -1, createdAt: -1 };
     if (req.query.search) {
       sortOption = { title: 1 };
     } else if (req.query.sort === 'alphabetical' || (req.query.tipo === 'pelicula' && !req.query.sort)) {
@@ -690,7 +691,8 @@ router.get("/", verifyToken, async (req, res, next) => {
                 description: ch.description || ""
             }))
         })) : [],
-        user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt
+        user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt,
+        hasNewEpisodes: v.hasNewEpisodes
       };
     };
 
@@ -728,7 +730,7 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       return res.status(400).json({ error: "Temporadas son obligatorias para series/anime/dorama/novela/documental." });
     }
     if (tipo !== "pelicula") { // La subcategoría aplica a todo lo que no sea película
-      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "HBO Max", "Retro", "Animadas", "ZONA KIDS"]; // Añadir ZONA KIDS y HBO Max
+      const validSubcategorias = ["Netflix", "Prime Video", "Disney", "Apple TV", "Hulu y Otros", "HBO Max", "hbo max", "Retro", "Animadas", "ZONA KIDS"]; // Añadir ZONA KIDS y HBO Max
       // Aceptar coincidencias sin considerar mayúsculas/minúsculas
       const normalized = (subcategoria || '').toString().trim().toLowerCase();
       const matches = validSubcategorias.some(s => s.toString().trim().toLowerCase() === normalized);

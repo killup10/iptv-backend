@@ -10,6 +10,7 @@ const SerieSchema = new Schema({
   // imagen personalizada subida por admin que debe sobreescribir la imagen TMDB
   customThumbnail: String,
   capitulos: [{ type: Schema.Types.ObjectId, ref: 'Capitulo' }],
+  newEpisodes: { type: Boolean, default: false },
 });
 
 const Serie = mongoose.model('Serie', SerieSchema);

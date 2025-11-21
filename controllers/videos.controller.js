@@ -598,7 +598,7 @@ export const updateVideoAdmin = async (req, res, next) => {
     const allowedFields = [
       'title', 'description', 'releaseYear', 'genres', 'active', 
       'isFeatured', 'mainSection', 'requiresPlan', 'logo', 
-      'customThumbnail', 'trailerUrl', 'tipo', 'subcategoria'
+      'customThumbnail', 'trailerUrl', 'tipo', 'subcategoria', 'hasNewEpisodes'
     ];
 
     allowedFields.forEach(field => {
@@ -607,6 +607,15 @@ export const updateVideoAdmin = async (req, res, next) => {
         videoToUpdate[field] = updateData[field];
       }
     });
+
+    // Nueva lógica para gestionar la fecha de "Nuevos Episodios"
+    if (Object.prototype.hasOwnProperty.call(updateData, 'hasNewEpisodes')) {
+      if (updateData.hasNewEpisodes) {
+        videoToUpdate.latestUpdate = new Date();
+      } else {
+        videoToUpdate.latestUpdate = null;
+      }
+    }
 
     // --- NUEVA LÓGICA PARA UNIFICAR THUMBNAILS ---
     // Prioridad: Custom > TMDB > Logo. El campo 'thumbnail' debe tener la imagen final.
@@ -664,18 +673,19 @@ export const updateVideoAdmin = async (req, res, next) => {
 
   } catch (error) {
     console.error(`Error actualizando video ${id}:`, error);
-  if (error.name === 'ValidationError') {
-    // Normalize Mongoose ValidationError to a simple map: field -> message
-    const details = {};
-    try {
-      for (const [key, val] of Object.entries(error.errors || {})) {
-        details[key] = val?.message || String(val);
+    if (error.name === 'ValidationError') {
+      // Normalize Mongoose ValidationError to a simple map: field -> message
+      const details = {};
+      try {
+        for (const [key, val] of Object.entries(error.errors || {})) {
+          details[key] = val?.message || String(val);
+        }
+      } catch (e) {
+        // fallback to raw errors object if something unexpected
+        return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
       }
-    } catch (e) {
-      // fallback to raw errors object if something unexpected
-      return res.status(400).json({ error: "Error de validación del backend.", details: error.errors });
+      next(error);
     }
-    next(error);
   }
 };
 
