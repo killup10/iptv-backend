@@ -133,7 +133,8 @@ router.get("/public/featured-series", async (req, res, next) => {
   try {
     // CORRECCIÓN: Busca series que no sean animes.
     const criteria = { 
-      tipo: { $in: ["serie", "dorama", "novela", "documental"] }, 
+      tipo: "serie",
+      subtipo: { $ne: "anime" },
       isFeatured: true, 
       active: true 
     };
