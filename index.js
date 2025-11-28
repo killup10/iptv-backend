@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 import app from "./app.js"; // app ya viene con CORS configurado desde app.js (pero forzamos configuración segura aquí)
 
 const __filename = fileURLToPath(import.meta.url);
@@ -163,17 +164,37 @@ app.get("/", (_req, res) => {
 });
 
 // --- Servir archivos estáticos del frontend (logo, fondo, etc) ---
-const frontendDistPath = path.join(__dirname, '../iptv-frontend-clean-updated/dist');
-app.use(express.static(frontendDistPath, {
-  maxAge: '1d',
-  etag: false
-}));
+// Buscar dist en múltiples ubicaciones posibles
+const possiblePaths = [
+  path.join(__dirname, '../iptv-frontend-clean-updated/dist'),
+  path.join(__dirname, '../iptv-frontend/dist'),
+  path.join(__dirname, './dist'),
+  '/opt/render/project/src/../iptv-frontend-clean-updated/dist' // Render path
+];
 
-// Log para debug
-app.get('/logo-teamg.png', (_req, res) => {
-  console.log(`📸 Sirviendo logo desde: ${frontendDistPath}/logo-teamg.png`);
-  res.sendFile(path.join(frontendDistPath, 'logo-teamg.png'));
-});
+let frontendDistPath = null;
+for (const p of possiblePaths) {
+  try {
+    if (fs.existsSync(p)) {
+      frontendDistPath = p;
+      console.log(`✅ Encontrado dist en: ${frontendDistPath}`);
+      break;
+    }
+  } catch (err) {
+    // Ignorar errores y continuar
+  }
+}
+
+if (frontendDistPath) {
+  app.use(express.static(frontendDistPath, {
+    maxAge: '1d',
+    etag: false
+  }));
+  
+  console.log(`📂 Sirviendo assets estáticos desde: ${frontendDistPath}`);
+} else {
+  console.warn('⚠️ No se encontró carpeta dist del frontend');
+}
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
