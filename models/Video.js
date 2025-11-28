@@ -112,6 +112,8 @@ const videoSchema = new mongoose.Schema({
   isFeatured: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
   hasNewEpisodes: { type: Boolean, default: false },
+  is4K: { type: Boolean, default: false },
+  is60FPS: { type: Boolean, default: false },
   latestUpdate: { type: Date, default: null },
 
   thumbnail: { type: String, default: '' },
