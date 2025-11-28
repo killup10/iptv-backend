@@ -3,7 +3,12 @@ import mongoose from "mongoose";
 import fetch from "node-fetch";
 import express from "express";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 import app from "./app.js"; // app ya viene con CORS configurado desde app.js (pero forzamos configuración segura aquí)
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import authRoutes from "./routes/auth.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import videosRoutes from "./routes/videos.routes.js";
@@ -155,6 +160,19 @@ app.get("/proxy", async (req, res) => {
 // --- Rutas principales ---
 app.get("/", (_req, res) => {
   res.send("Servidor backend IPTV TeamG Play v5 ACTIVO 🚀");
+});
+
+// --- Servir archivos estáticos del frontend (logo, fondo, etc) ---
+const frontendDistPath = path.join(__dirname, '../iptv-frontend-clean-updated/dist');
+app.use(express.static(frontendDistPath, {
+  maxAge: '1d',
+  etag: false
+}));
+
+// Log para debug
+app.get('/logo-teamg.png', (_req, res) => {
+  console.log(`📸 Sirviendo logo desde: ${frontendDistPath}/logo-teamg.png`);
+  res.sendFile(path.join(frontendDistPath, 'logo-teamg.png'));
 });
 
 app.use("/api/auth", authRoutes);
