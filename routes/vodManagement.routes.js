@@ -51,6 +51,7 @@ const getVodsByType = (tipo, subtipo = null) => {
         isFeatured: v.isFeatured, logo: v.logo, thumbnail: v.logo, 
         customThumbnail: v.customThumbnail, tmdbThumbnail: v.tmdbThumbnail, 
         trailerUrl: v.trailerUrl, active: v.active,
+        is4K: v.is4K || false, is60FPS: v.is60FPS || false,
         subcategoria: v.tipo === "serie" ? (v.subcategoria || "Netflix") : undefined,
         user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt 
       });

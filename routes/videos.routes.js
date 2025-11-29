@@ -716,7 +716,7 @@ router.get("/", verifyToken, async (req, res, next) => {
 router.post("/", verifyToken, isAdmin, async (req, res, next) => {
   try {
     // CAMBIO: Recibir 'seasons' en lugar de 'chapters'
-    const { title, description, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons } = req.body; 
+    const { title, description, url, tipo, subtipo, subcategoria, mainSection, requiresPlan, genres, trailerUrl, releaseYear, isFeatured, active, logo, customThumbnail, seasons, is4K, is60FPS } = req.body; 
 
     if (!title) return res.status(400).json({ error: "Título es obligatorio." });
     const validTipos = ["pelicula", "serie", "anime", "dorama", "novela", "documental", "zona kids"];
@@ -791,7 +791,9 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       customThumbnail: customThumbnail || "",
       trailerUrl: trailerUrl || "",
       // CAMBIO: Guardar 'seasons' en lugar de 'chapters'
-      seasons: seasons || [], 
+      seasons: seasons || [],
+      is4K: is4K || false,
+      is60FPS: is60FPS || false,
       watchProgress: [] 
     });
 
