@@ -693,7 +693,9 @@ router.get("/", verifyToken, async (req, res, next) => {
             }))
         })) : [],
         user: v.user, createdAt: v.createdAt, updatedAt: v.updatedAt,
-        hasNewEpisodes: v.hasNewEpisodes
+        hasNewEpisodes: v.hasNewEpisodes,
+        is4K: v.is4K,
+        is60FPS: v.is60FPS
       };
     };
 
