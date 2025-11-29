@@ -598,7 +598,8 @@ export const updateVideoAdmin = async (req, res, next) => {
     const allowedFields = [
       'title', 'description', 'releaseYear', 'genres', 'active', 
       'isFeatured', 'mainSection', 'requiresPlan', 'logo', 
-      'customThumbnail', 'trailerUrl', 'tipo', 'subcategoria', 'hasNewEpisodes'
+      'customThumbnail', 'trailerUrl', 'tipo', 'subcategoria', 'hasNewEpisodes',
+      'is4K', 'is60FPS'
     ];
 
     allowedFields.forEach(field => {
