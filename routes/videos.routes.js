@@ -69,6 +69,37 @@ function makeFullUrl(req, p) {
   return host + '/' + p;
 }
 
+const mapVODToPublicFormat = (v, req) => {
+  console.log(`[DEBUG] Raw video object before mapping:`, JSON.stringify(v, null, 2));
+  const computed = computeRating(v);
+  const persistedDisplay = v.ratingDisplay ?? null;
+  const persistedLabel = v.ratingLabel ?? null;
+  const finalDisplay = persistedDisplay || computed.display;
+  const finalLabel = persistedLabel || computed.label;
+  return ({
+    id: v._id,
+    _id: v._id,
+    name: v.title,
+    title: v.title,
+    releaseYear: v.releaseYear || null,
+    description: v.description || "",
+    genres: v.genres || [],
+    mainSection: v.mainSection || "",
+    thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
+    logo: makeFullUrl(req, v.logo || ''),
+    customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
+    tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
+    tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
+    ratingDisplay: finalDisplay,
+    ratingLabel: finalLabel,
+    trailerUrl: v.trailerUrl || "",
+    tipo: v.tipo,
+    hasNewEpisodes: v.hasNewEpisodes || false,
+    is4K: v.is4K || false,
+    is60FPS: v.is60FPS || false
+  });
+};
+
 // Configuración de Multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -95,34 +126,7 @@ router.get("/public/featured-movies", async (req, res, next) => {
   try {
     const criteria = { tipo: "pelicula", isFeatured: true, active: true };
     const movies = await Video.find(criteria).sort({ createdAt: -1 }).limit(10);
-      const mapVODToPublicFormat = (v) => {
-        const computed = computeRating(v);
-        const persistedDisplay = v.ratingDisplay ?? null;
-        const persistedLabel = v.ratingLabel ?? null;
-        const finalDisplay = persistedDisplay || computed.display;
-        const finalLabel = persistedLabel || computed.label;
-        return ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  // Provide absolute URLs and include alternate image fields for the frontend
-  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-  logo: makeFullUrl(req, v.logo || ''),
-  customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
-  tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
-      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-      ratingDisplay: finalDisplay,
-      ratingLabel: finalLabel,
-      trailerUrl: v.trailerUrl || ""
-    });
-    };
-    res.json(movies.map(mapVODToPublicFormat));
+    res.json(movies.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-movies:", error);
     next(error);
@@ -139,33 +143,7 @@ router.get("/public/featured-series", async (req, res, next) => {
       active: true 
     };
     const series = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => {
-      const computed = computeRating(v);
-      const persistedDisplay = v.ratingDisplay ?? null;
-      const persistedLabel = v.ratingLabel ?? null;
-      const finalDisplay = persistedDisplay || computed.display;
-      const finalLabel = persistedLabel || computed.label;
-      return ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-      logo: makeFullUrl(req, v.logo || ''),
-      customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
-      tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
-      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-      ratingDisplay: finalDisplay,
-      ratingLabel: finalLabel,
-      trailerUrl: v.trailerUrl || ""
-    });
-    };
-    res.json(series.map(mapVODToPublicFormat));
+    res.json(series.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-series:", error.message);
     next(error);
@@ -181,30 +159,7 @@ router.get("/public/featured-animes", async (req, res, next) => {
       active: true
     };
     const animes = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => {
-      const computed = computeRating(v);
-      const persistedDisplay = v.ratingDisplay ?? null;
-      const persistedLabel = v.ratingLabel ?? null;
-      const finalDisplay = persistedDisplay || computed.display;
-      const finalLabel = persistedLabel || computed.label;
-      return ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-  tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-  ratingDisplay: finalDisplay,
-  ratingLabel: finalLabel,
-      trailerUrl: v.trailerUrl || ""
-    });
-    };
-    res.json(animes.map(mapVODToPublicFormat));
+    res.json(animes.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-animes:", error.message);
     next(error);
@@ -219,19 +174,7 @@ router.get("/public/featured-doramas", async (req, res, next) => {
       active: true
     };
     const doramas = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(doramas.map(mapVODToPublicFormat));
+    res.json(doramas.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-doramas:", error.message);
     next(error);
@@ -246,19 +189,7 @@ router.get("/public/featured-novelas", async (req, res, next) => {
       active: true
     };
     const novelas = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(novelas.map(mapVODToPublicFormat));
+    res.json(novelas.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-novelas:", error.message);
     next(error);
@@ -273,19 +204,7 @@ router.get("/public/featured-documentales", async (req, res, next) => {
       active: true
     };
     const documentales = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(10);
-    const mapVODToPublicFormat = (v) => ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-      trailerUrl: v.trailerUrl || ""
-    });
-    res.json(documentales.map(mapVODToPublicFormat));
+    res.json(documentales.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/featured-documentales:", error.message);
     next(error);
@@ -298,35 +217,7 @@ router.get("/public/recently-added", async (req, res, next) => {
       active: true
     };
     const videos = await Video.find(criteria).sort({ latestUpdate: -1, createdAt: -1 }).limit(15);
-    const mapVODToPublicFormat = (v) => {
-      const computed = computeRating(v);
-      const persistedDisplay = v.ratingDisplay ?? null;
-      const persistedLabel = v.ratingLabel ?? null;
-      const finalDisplay = persistedDisplay || computed.display;
-      const finalLabel = persistedLabel || computed.label;
-      return ({
-      id: v._id,
-      _id: v._id,
-      name: v.title,
-      title: v.title,
-      releaseYear: v.releaseYear || null,
-      description: v.description || "",
-      genres: v.genres || [],
-      mainSection: v.mainSection || "",
-  // Prioridad Unificada: Se usa el campo 'thumbnail' pre-calculado, o se calcula al vuelo.
-  thumbnail: makeFullUrl(req, v.customThumbnail || v.thumbnail || v.tmdbThumbnail || v.logo || "/img/placeholder-default.png"),
-  logo: makeFullUrl(req, v.logo || ''),
-  customThumbnail: makeFullUrl(req, v.customThumbnail || ''),
-  tmdbThumbnail: makeFullUrl(req, v.tmdbThumbnail || ''),
-      tmdbRating: (typeof v.tmdbRating === 'number' ? v.tmdbRating : (v.rating ?? v.vote_average ?? null)),
-      ratingDisplay: finalDisplay,
-      ratingLabel: finalLabel,
-      trailerUrl: v.trailerUrl || "",
-      tipo: v.tipo,
-      hasNewEpisodes: v.hasNewEpisodes || false
-    });
-    };
-    res.json(videos.map(mapVODToPublicFormat));
+    res.json(videos.map(v => mapVODToPublicFormat(v, req)));
   } catch (error) {
     console.error("Error en BACKEND /public/recently-added:", error);
     next(error);
