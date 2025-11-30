@@ -6,12 +6,34 @@ import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import Video from "../models/Video.js";
 import UserProgress from "../models/UserProgress.js";
 import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
+import { normalizeSubcategoria } from "../utils/normalizeSubcategoria.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
 
 
 
 const router = express.Router();
+
+// Helper: Normalizar subcategoría para que coincida con el enum del Schema
+// Convierte "HBO MAX", "hbo max", "HBO max" → "HBO Max"
+function normalizeSubcategoria(subcategoria) {
+  if (!subcategoria) return undefined;
+  
+  const normalized = subcategoria.toString().trim().toLowerCase();
+  const validSubcategorias = {
+    "netflix": "Netflix",
+    "prime video": "Prime Video",
+    "disney": "Disney",
+    "apple tv": "Apple TV",
+    "hulu y otros": "Hulu y Otros",
+    "hbo max": "HBO Max",
+    "retro": "Retro",
+    "animadas": "Animadas",
+    "zona kids": "ZONA KIDS"
+  };
+  
+  return validSubcategorias[normalized] || subcategoria; // Si no está en el mapa, devuelve el original
+}
 
 // Helper: compute a displayable rating from multiple possible fields.
 // Compute a normalized display value and optional textual label for ratings.
@@ -675,7 +697,8 @@ router.post("/", verifyToken, isAdmin, async (req, res, next) => {
       url: url || "",
       tipo: tipo || "pelicula",
       subtipo: (tipo !== "pelicula") ? (subtipo || tipo) : undefined, // Asegurarse de que subtipo se establezca si no es película
-      subcategoria: tipo !== "pelicula" ? subcategoria : undefined, // Asegurarse de que subcategoria se establezca si no es película
+      // NORMALIZAR subcategoria: convertir "HBO MAX" → "HBO Max"
+      subcategoria: tipo !== "pelicula" ? normalizeSubcategoria(subcategoria) : undefined,
       mainSection: mainSection || "POR_GENERO",
       genres: Array.isArray(genres) ? genres : (genres ? genres.split(',').map(g => g.trim()).filter(g => g) : []),
       requiresPlan: requiresPlan || [],
