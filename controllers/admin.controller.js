@@ -173,3 +173,29 @@ export const updateUserMaxDevicesAdmin = async (req, res, next) => {
         next(error);
     }
 };
+
+// --- NUEVA FUNCIÓN: Eliminar un usuario ---
+/**
+ * @desc Elimina un usuario de la base de datos.
+ * @route DELETE /api/admin/users/:userId
+ * @access Private/Admin
+ */
+export const deleteUserAdmin = async (req, res, next) => {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido." });
+    }
+
+    try {
+        const deletedUser = await User.findByIdAndDelete(userId).select("-password");
+
+        if (!deletedUser) {
+            return res.status(404).json({ error: "Usuario no encontrado para eliminar." });
+        }
+        res.json({ message: "Usuario eliminado exitosamente.", user: deletedUser });
+    } catch (error) {
+        console.error("Error en CTRL:deleteUserAdmin:", error.message);
+        next(error);
+    }
+};

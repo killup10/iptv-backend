@@ -8,7 +8,8 @@ import { verifyToken, isAdmin } from "../middlewares/verifyToken.js";
 import {
   getAllUsersAdmin,
   updateUserPlanAdmin,
-  updateUserStatusAdmin
+  updateUserStatusAdmin,
+  deleteUserAdmin
   // Si tienes otras funciones de admin (ej. para dashboard, settings), impórtalas aquí
   // getDashboardStats,
   // updateGlobalSettings,
@@ -27,6 +28,9 @@ router.put("/users/:userId/plan", verifyToken, isAdmin, updateUserPlanAdmin);
 
 // PUT /api/admin/users/:userId/status - Activar/desactivar un usuario específico
 router.put("/users/:userId/status", verifyToken, isAdmin, updateUserStatusAdmin);
+
+// DELETE /api/admin/users/:userId - Eliminar un usuario
+router.delete("/users/:userId", verifyToken, isAdmin, deleteUserAdmin);
 
 // PUT /api/admin/series/:id/thumbnail - Actualizar thumbnail personalizado de una serie
 router.put('/series/:id/thumbnail', verifyToken, isAdmin, async (req, res) => {
