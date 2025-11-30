@@ -318,8 +318,6 @@ router.get("/:id/progress", verifyToken, async (req, res, next) => {
   }
 });
 
-// router.get("/:id/next-chapter", verifyToken, getNextChapter);
-
 // Guarda/Actualiza el progreso de un video específico para el usuario actual
 router.put("/:id/progress", verifyToken, async (req, res, next) => {
   try {
@@ -332,15 +330,16 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
     // CAMBIO: Recibir lastSeason del body
     const { lastSeason, lastChapter, lastTime, completed, progress } = req.body; 
 
-    if (typeof lastTime !== 'number' || lastTime < 0) {
-      return res.status(400).json({ error: "lastTime debe ser un número positivo." });
+    // Validar lastTime solo si se proporciona
+    if (lastTime !== undefined && (typeof lastTime !== 'number' || lastTime < 0)) {
+      return res.status(400).json({ error: "lastTime debe ser un número positivo o no proporcionarse." });
     }
     // CAMBIO: Validar lastSeason si se proporciona
-    if (lastSeason !== undefined && typeof lastSeason !== 'number' || lastSeason < 0) {
+    if (lastSeason !== undefined && (typeof lastSeason !== 'number' || lastSeason < 0)) {
         return res.status(400).json({ error: "lastSeason debe ser un número positivo o cero." });
     }
     // CAMBIO: Validar progress si se proporciona
-    if (progress !== undefined && typeof progress !== 'number' || progress < 0 || progress > 1) {
+    if (progress !== undefined && (typeof progress !== 'number' || progress < 0 || progress > 1)) {
       return res.status(400).json({ error: "progress debe ser un número entre 0 y 1." });
     }
 
@@ -353,7 +352,7 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
 
     if (progressIndex > -1) {
       // Actualiza la entrada existente
-      video.watchProgress[progressIndex].lastTime = lastTime;
+      if (lastTime !== undefined) video.watchProgress[progressIndex].lastTime = lastTime;
       if (lastChapter !== undefined) video.watchProgress[progressIndex].lastChapter = lastChapter;
       // CAMBIO: Actualizar lastSeason y progress
       if (lastSeason !== undefined) video.watchProgress[progressIndex].lastSeason = lastSeason;
@@ -366,7 +365,7 @@ router.put("/:id/progress", verifyToken, async (req, res, next) => {
       // Crea una nueva entrada de progreso para el usuario
       const newProgress = {
         userId: new mongoose.Types.ObjectId(userId),
-        lastTime,
+        lastTime: lastTime !== undefined ? lastTime : 0,
         lastChapter: lastChapter !== undefined ? lastChapter : 0,
         // CAMBIO: Incluir lastSeason y progress
         lastSeason: lastSeason !== undefined ? lastSeason : 0,

@@ -12,9 +12,20 @@ export const getContinueWatching = async (req, res, next) => {
       return res.status(401).json({ error: "No se pudo identificar al usuario." });
     }
 
-    const progressEntries = await UserProgress.find({ user: userId, progress: { $gt: 5 } })
+    // Buscar todos los registros SIN filtro progress para debugging
+    const allProgressEntries = await UserProgress.find({ user: userId })
       .populate('video')
       .lean();
+    
+    console.log(`[getContinueWatching] User ${userId}: encontrados ${allProgressEntries.length} registros de progreso (sin filtrar)`);
+    allProgressEntries.forEach(pe => {
+      console.log(`  - Video ${pe.video?.title}: progress=${pe.progress}, lastTime=${pe.lastTime}, lastWatched=${pe.lastWatched}`);
+    });
+
+    // Filtrar solo los que tienen más de 5 segundos
+    const progressEntries = allProgressEntries.filter(pe => (pe.progress || pe.lastTime || 0) > 5);
+    
+    console.log(`[getContinueWatching] Después de filtrar > 5 segundos: ${progressEntries.length} items`);
 
     let items = progressEntries
       .filter(pe => pe.video && pe.video.active)
@@ -35,24 +46,29 @@ export const getContinueWatching = async (req, res, next) => {
         requiresPlan: pe.video.requiresPlan || []
       }));
 
+    console.log(`[getContinueWatching] Después de mapear: ${items.length} items`);
+
     // Aplicar filtro por plan si no es admin
     const isAdminUser = Array.isArray(req.user.roles) && req.user.roles.includes('admin');
     const normalizedUserPlanKey = (req.user.plan || 'gplay').toLowerCase();
+
+    console.log(`[getContinueWatching] User plan: ${normalizedUserPlanKey}, isAdmin: ${isAdminUser}`);
 
     if (!isAdminUser) {
       const planHierarchy = { 'gplay': 1, 'estandar': 2, 'sports': 3, 'cinefilo': 4, 'premium': 5 };
       const userPlanLevel = planHierarchy[normalizedUserPlanKey] || 0;
       items = items.filter(item => {
         const requires = item.requiresPlan || [];
-        if (requires.length === 0) return false; // requerir al menos un plan
-        return requires.some(r => (planHierarchy[r] || 0) <= userPlanLevel);
+        const hasAccess = requires.length === 0 || requires.some(r => (planHierarchy[r] || 0) <= userPlanLevel);
+        console.log(`  - ${item.title}: requiresPlan=[${requires.join(', ')}], hasAccess=${hasAccess}`);
+        return hasAccess;
       });
     }
 
     // Ordenar por lastWatched desc y limitar
     items = items.sort((a, b) => new Date(b.watchProgress.lastWatched || 0) - new Date(a.watchProgress.lastWatched || 0));
 
-    console.log(`[GET /api/videos/user/continue-watching] User ${userId} | Enviando ${items.length} items.`);
+    console.log(`[GET /api/videos/user/continue-watching] User ${userId} | Enviando ${items.length} items finales.`);
     res.json(items);
   } catch (error) {
     console.error(`Error en GET /api/videos/user/continue-watching para user ${req.user?.id}:`, error);
