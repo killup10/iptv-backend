@@ -554,7 +554,9 @@ router.get("/", verifyToken, async (req, res, next) => {
       tipo: v.tipo,
       releaseYear: v.releaseYear || null,
       subcategoria: v.tipo !== "pelicula" ? (v.subcategoria || "Netflix") : undefined, // CAMBIO: subcategoria para tipos que no sean pelicula
-      requiresPlan: v.requiresPlan
+      requiresPlan: v.requiresPlan,
+      is4K: v.is4K || false,
+      is60FPS: v.is60FPS || false
     });
     
   const mapToFullAdminFormat = (v) => {
