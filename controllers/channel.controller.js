@@ -413,14 +413,19 @@ export const streamProxyHandler = async (req, res, next) => {
       return res.status(400).json({ error: 'URL del stream inválida' });
     }
 
-    // Realizar la solicitud del stream
+    // 🔧 FIX: Realizar la solicitud del stream con headers mejorados
     const fetch = (await import('node-fetch')).default;
     const response = await fetch(decodedUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/vnd.apple.mpegurl, application/x-mpegURL, */*',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Accept-Encoding': 'gzip, deflate',
+        'Origin': 'https://teamgplay.online',
+        'Referer': 'https://teamgplay.online/',
       },
-      timeout: 10000
+      timeout: 15000,
+      redirect: 'follow' // Seguir redirects
     });
 
     if (!response.ok) {
@@ -428,9 +433,28 @@ export const streamProxyHandler = async (req, res, next) => {
       return res.status(response.status).json({ error: `Error obteniendo stream: ${response.statusText}` });
     }
 
-    // Copiar headers relevantes
-    res.set('Content-Type', response.headers.get('content-type'));
-    res.set('Access-Control-Allow-Origin', '*');
+    // 🔧 FIX: Headers CORS correctos para HLS.js
+    const contentType = response.headers.get('content-type') || 'application/vnd.apple.mpegurl';
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    
+    // 🔧 FIX: Copiar headers críticos del stream original
+    const acceptRanges = response.headers.get('accept-ranges');
+    if (acceptRanges) {
+      res.setHeader('Accept-Ranges', acceptRanges);
+    }
+    
+    const contentLength = response.headers.get('content-length');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+    
+    console.log(`[StreamProxy] ✅ Sirviendo stream: ${contentType}`);
     
     // Streaming directo sin guardar en memoria
     response.body.pipe(res);
