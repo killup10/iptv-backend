@@ -382,3 +382,61 @@ export const processM3UAdmin = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * 🔒 PROXY SEGURO PARA M3U8 - Resuelve problemas de CORS y permite URL ocultas en logs
+ * Uso: /api/channels/proxy/stream?url=<encoded_m3u8_url>
+ */
+export const streamProxyHandler = async (req, res, next) => {
+  try {
+    const streamUrl = req.query.url;
+    
+    if (!streamUrl) {
+      return res.status(400).json({ error: 'URL del stream requerida' });
+    }
+
+    // Decodificar URL
+    let decodedUrl;
+    try {
+      decodedUrl = Buffer.from(streamUrl, 'base64').toString('utf-8');
+    } catch (e) {
+      // Si no está en base64, usarla como está
+      decodedUrl = decodeURIComponent(streamUrl);
+    }
+
+    console.log(`[StreamProxy] Proxy de M3U8 para usuario: ${req.user?._id || 'guest'}`);
+    
+    // Validar que sea una URL válida
+    try {
+      new URL(decodedUrl);
+    } catch (e) {
+      return res.status(400).json({ error: 'URL del stream inválida' });
+    }
+
+    // Realizar la solicitud del stream
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(decodedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok) {
+      console.error(`[StreamProxy] Error en stream: ${response.status} ${response.statusText}`);
+      return res.status(response.status).json({ error: `Error obteniendo stream: ${response.statusText}` });
+    }
+
+    // Copiar headers relevantes
+    res.set('Content-Type', response.headers.get('content-type'));
+    res.set('Access-Control-Allow-Origin', '*');
+    
+    // Streaming directo sin guardar en memoria
+    response.body.pipe(res);
+
+  } catch (error) {
+    console.error('[StreamProxy] Error:', error.message);
+    res.status(500).json({ error: 'Error procesando stream' });
+  }
+};

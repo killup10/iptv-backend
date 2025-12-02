@@ -10,7 +10,8 @@ import {
     createChannelAdmin,
     updateChannelAdmin,
     deleteChannelAdmin,
-    processM3UAdmin
+    processM3UAdmin,
+    streamProxyHandler  // 🔒 Proxy seguro para M3U8
 } from "../controllers/channel.controller.js";
 
 const router = express.Router();
@@ -34,6 +35,7 @@ const upload = multer({
 router.get("/list", getPublicChannels); 
 router.get("/id/:id", verifyToken, getChannelByIdForUser);
 router.get("/sections", getChannelFilterSections); // Para los botones de filtro
+router.get("/proxy/stream", verifyToken, streamProxyHandler); // 🔒 Proxy seguro para M3U8
 
 // --- RUTAS SOLO PARA ADMINISTRADORES ---
 router.get("/admin/list", verifyToken, isAdmin, getAllChannelsAdmin);
