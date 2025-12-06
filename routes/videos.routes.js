@@ -9,6 +9,7 @@ import getTMDBThumbnail from "../utils/getTMDBThumbnail.js";
 import { normalizeSubcategoria } from "../utils/normalizeSubcategoria.js";
 // Asegúrate que la lógica en 'getContinueWatching' es la que corregimos en el controlador
 import { getContinueWatching, createBatchVideosFromTextAdmin, deleteBatchVideosAdmin, updateVideoAdmin } from "../controllers/videos.controller.js";
+import { getRecommendations, getVideosByGenres, getPersonalizedRecommendations } from "../services/recommendationService.js";
 
 
 
@@ -1086,5 +1087,163 @@ router.delete("/:id", verifyToken, isAdmin, async (req, res, next) => {
   }
 });
 
+// ============================================
+// RUTAS DE RECOMENDACIONES
+// ============================================
+
+/**
+ * GET /api/videos/:id/recommendations
+ * Obtiene películas/series similares basadas en géneros, tipo y año de lanzamiento
+ * Query params:
+ *   - limit: número máximo de recomendaciones (default: 6)
+ */
+router.get("/:id/recommendations", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 6;
+
+    // Validar que sea un ObjectId válido
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "ID de video inválido" });
+    }
+
+    const recommendations = await getRecommendations(id, limit);
+
+    // Mapear al formato público
+    const formattedRecommendations = recommendations.map(v => mapVODToPublicFormat(v, req));
+
+    res.json({
+      success: true,
+      recommendations: formattedRecommendations,
+      count: formattedRecommendations.length,
+    });
+  } catch (error) {
+    console.error(`Error en GET /api/videos/:id/recommendations:`, error);
+    res.status(500).json({ error: error.message || "Error al obtener recomendaciones" });
+  }
+});
+
+/**
+ * GET /api/videos/:id/similar-by-genre
+ * Obtiene videos similares filtrados por los géneros principales del video
+ * Query params:
+ *   - limit: número máximo de resultados (default: 10)
+ */
+router.get("/:id/similar-by-genre", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 10;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "ID de video inválido" });
+    }
+
+    const video = await Video.findById(id);
+    if (!video) {
+      return res.status(404).json({ error: "Video no encontrado" });
+    }
+
+    const similarVideos = await getVideosByGenres(
+      video.genres || [],
+      video.tipo,
+      limit
+    );
+
+    const formattedVideos = similarVideos.map(v => mapVODToPublicFormat(v, req));
+
+    res.json({
+      success: true,
+      similarVideos: formattedVideos,
+      count: formattedVideos.length,
+    });
+  } catch (error) {
+    console.error(`Error en GET /api/videos/:id/similar-by-genre:`, error);
+    res.status(500).json({ error: error.message || "Error al obtener videos similares" });
+  }
+});
+
+/**
+ * GET /api/videos/recommendations/personalized
+ * Obtiene recomendaciones personalizadas basadas en el historial del usuario autenticado
+ * Query params:
+ *   - limit: número máximo de recomendaciones (default: 10)
+ * Requiere: autenticación
+ */
+router.get("/recommendations/personalized", verifyToken, async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const personalizedRecommendations = await getPersonalizedRecommendations(
+      userId,
+      limit
+    );
+
+    const formattedRecommendations = personalizedRecommendations.map(v =>
+      mapVODToPublicFormat(v, req)
+    );
+
+    res.json({
+      success: true,
+      recommendations: formattedRecommendations,
+      count: formattedRecommendations.length,
+    });
+  } catch (error) {
+    console.error(
+      `Error en GET /api/videos/recommendations/personalized:`,
+      error
+    );
+    res.status(500).json({
+      error: error.message || "Error al obtener recomendaciones personalizadas",
+    });
+  }
+});
+
+/**
+ * GET /api/videos/genre/:genre
+ * Obtiene todos los videos de un género específico
+ * Query params:
+ *   - tipo: tipo de contenido (pelicula, serie, anime, etc.) - optional
+ *   - limit: número máximo de resultados (default: 20)
+ *   - page: número de página (default: 1)
+ */
+router.get("/genre/:genre", async (req, res, next) => {
+  try {
+    const { genre } = req.params;
+    const { tipo } = req.query;
+    const limit = parseInt(req.query.limit) || 20;
+    const page = parseInt(req.query.page) || 1;
+    const skip = (page - 1) * limit;
+
+    const query = {
+      active: true,
+      genres: { $elemMatch: { $regex: genre, $options: "i" } },
+    };
+
+    if (tipo) {
+      query.tipo = tipo;
+    }
+
+    const videos = await Video.find(query)
+      .sort({ isFeatured: -1, releaseYear: -1 })
+      .limit(limit)
+      .skip(skip);
+
+    const total = await Video.countDocuments(query);
+
+    const formattedVideos = videos.map(v => mapVODToPublicFormat(v, req));
+
+    res.json({
+      success: true,
+      videos: formattedVideos,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error(`Error en GET /api/videos/genre/:genre:`, error);
+    res.status(500).json({ error: error.message || "Error al obtener videos por género" });
+  }
+});
 
 export default router;
