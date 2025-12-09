@@ -40,7 +40,16 @@ const userSchema = new mongoose.Schema({
     // El plan 'basico' no existía en la jerarquía de planes, impidiendo el acceso a todo el contenido.
     enum: ['gplay', 'estandar', 'premium', 'cinefilo', 'sports'],
     default: 'gplay'
-  }
+  },
+  // Mi Lista - lista personal de cada usuario
+  myList: [{
+    itemId: { type: String, required: true },
+    tipo: { type: String, default: 'movie' },
+    title: { type: String },
+    thumbnail: { type: String },
+    description: { type: String },
+    addedAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });

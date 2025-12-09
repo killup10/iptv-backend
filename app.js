@@ -17,6 +17,7 @@ import migrationRoutes from './routes/migration.routes.js';
 import progressRoutes from './routes/progress.routes.js';
 import deviceRoutes from './routes/device.routes.js';
 import collectionRoutes from './routes/collection.routes.js';
+import usersRoutes from './routes/users.routes.js';
 
 // --- BASIC SETUP ---
 dotenv.config();
@@ -119,6 +120,7 @@ app.use('/api/admin', migrationRoutes);
 app.use('/api/progress', progressRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api', collectionRoutes);
+app.use('/api/users', usersRoutes);
 
 // --- GLOBAL ERROR HANDLER ---
 app.use((err, req, res, next) => {
