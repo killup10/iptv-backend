@@ -279,6 +279,16 @@ router.get("/main-sections", verifyToken, async (req, res, next) => {
   }
 });
 
+router.get("/types", verifyToken, async (req, res, next) => {
+  try {
+    const types = await Video.distinct("tipo");
+    res.json(types);
+  } catch (error) {
+    console.error("Error en GET /api/videos/types:", error);
+    next(error);
+  }
+});
+
 
 // === RUTAS DE PROGRESO (LA LÓGICA CLAVE) ===
 
