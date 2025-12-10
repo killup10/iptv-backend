@@ -328,7 +328,7 @@ export const createBatchVideosFromTextAdmin = async (req, res, next) => {
             const detectedSubtipo = detectSubtipo(currentVideoData.seriesName, currentVideoData.genres);
             seriesMap.set(seriesKey, {
               title: currentVideoData.seriesName,
-              tipo: "serie",
+              tipo: detectedSubtipo, // CAMBIO: Usar el subtipo detectado como tipo real
               subtipo: detectedSubtipo,
               description: "",
               releaseYear: currentVideoData.releaseYear,
